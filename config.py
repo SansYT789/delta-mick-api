@@ -1,7 +1,3 @@
-"""
-Toàn bộ số liệu cân bằng game. Sửa ở đây, không sửa trong logic.
-"""
-
 # ---------------- XE ----------------
 # durability: máu tối đa (base, chưa cộng upgrade)
 # max_ef: EF cao nhất xe này được phép săn
@@ -10,10 +6,10 @@ Toàn bộ số liệu cân bằng game. Sửa ở đây, không sửa trong log
 CARS = {
     "rookie_truck": {
         "name": "Rookie Truck",
-        "price": 0,  # starter, ai cũng có sẵn
+        "price": 0,  # starter
         "durability": 100,
         "max_ef": 2,
-        "cooldown_min": 30,
+        "cooldown_min": 20,
         "base_rate": 40,
     },
     "storm_van": {
@@ -21,7 +17,7 @@ CARS = {
         "price": 5000,
         "durability": 150,
         "max_ef": 3,
-        "cooldown_min": 25,
+        "cooldown_min": 15,
         "base_rate": 65,
     },
     "armored_interceptor": {
@@ -29,7 +25,7 @@ CARS = {
         "price": 20000,
         "durability": 250,
         "max_ef": 4,
-        "cooldown_min": 20,
+        "cooldown_min": 10,
         "base_rate": 100,
     },
     "titan_vortex_rig": {
@@ -37,7 +33,7 @@ CARS = {
         "price": 80000,
         "durability": 400,
         "max_ef": 5,
-        "cooldown_min": 15,
+        "cooldown_min": 5,
         "base_rate": 150,
     },
 }
@@ -51,14 +47,14 @@ CAR_ORDER = ["rookie_truck", "storm_van", "armored_interceptor", "titan_vortex_r
 # payout_mult: hệ số nhân vào base_rate khi tính thưởng
 EF_SCALE = {
     0: {"session_min": (3, 5), "dmg_tick": (2, 4), "payout_mult": 1.0},
-    1: {"session_min": (4, 6), "dmg_tick": (4, 7), "payout_mult": 1.3},
-    2: {"session_min": (5, 8), "dmg_tick": (7, 12), "payout_mult": 1.7},
-    3: {"session_min": (6, 10), "dmg_tick": (12, 20), "payout_mult": 2.3},
-    4: {"session_min": (8, 13), "dmg_tick": (20, 32), "payout_mult": 3.0},
-    5: {"session_min": (10, 15), "dmg_tick": (32, 50), "payout_mult": 4.0},
+    1: {"session_min": (4, 6), "dmg_tick": (4, 6), "payout_mult": 1.3},
+    2: {"session_min": (5, 8), "dmg_tick": (7, 10), "payout_mult": 1.7},
+    3: {"session_min": (6, 10), "dmg_tick": (11, 16), "payout_mult": 2.3},
+    4: {"session_min": (8, 13), "dmg_tick": (16, 24), "payout_mult": 3.0},
+    5: {"session_min": (10, 15), "dmg_tick": (24, 36), "payout_mult": 4.0},
 }
 
-TICK_SECONDS = 30  # 1 tick sự kiện = 30s real-time
+TICK_SECONDS = 5  # 1 tick sự kiện = 5s real-time
 
 # ---------------- SỰ KIỆN MỖI TICK ----------------
 # trọng số random (cộng lại không cần bằng 100, dùng random.choices weights)
@@ -107,7 +103,7 @@ CAR_UPGRADE = {
 # ---------------- RADAR (giảm thời gian chờ bão xuất hiện, tăng cơ hội EF cao) ----------------
 RADAR_UPGRADE = {
     "wait_reduction_sec_per_level": 15,   # giảm thời gian chờ trước khi session bắt đầu
-    "base_wait_sec": 90,
+    "base_wait_sec": 60,
     "min_wait_sec": 10,
     "ef_luck_bonus_per_level": 0.06,      # +6%/level cơ hội roll EF cao hơn khi bắt đầu
     "max_level": 10,
