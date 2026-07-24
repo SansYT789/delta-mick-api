@@ -6,12 +6,22 @@
 CARS = {
     "rookie_truck": {
         "name": "Rookie Truck",
-        "price": 0,  # starter
+        "price": 0,
         "durability": 100,
         "max_ef": 2,
         "cooldown_min": 20,
         "base_rate": 40,
     },
+
+    "weather_scout": {
+        "name": "Weather Scout SUV",
+        "price": 2500,
+        "durability": 130,
+        "max_ef": 2,
+        "cooldown_min": 17,
+        "base_rate": 55,
+    },
+
     "storm_van": {
         "name": "Storm Chaser Van",
         "price": 5000,
@@ -20,6 +30,16 @@ CARS = {
         "cooldown_min": 15,
         "base_rate": 65,
     },
+
+    "storm_ranger": {
+        "name": "Storm Ranger Pickup",
+        "price": 10000,
+        "durability": 190,
+        "max_ef": 3,
+        "cooldown_min": 13,
+        "base_rate": 80,
+    },
+
     "armored_interceptor": {
         "name": "Armored Interceptor",
         "price": 20000,
@@ -28,18 +48,65 @@ CARS = {
         "cooldown_min": 10,
         "base_rate": 100,
     },
+
+    "dominator_mk1": {
+        "name": "Dominator MK-I",
+        "price": 45000,
+        "durability": 350,
+        "max_ef": 4,
+        "cooldown_min": 8,
+        "base_rate": 130,
+    },
+
+    "tiv_classic": {
+        "name": "TIV Classic",
+        "price": 75000,
+        "durability": 500,
+        "max_ef": 5,
+        "cooldown_min": 7,
+        "base_rate": 170,
+    },
+
     "titan_vortex_rig": {
         "name": "Titan Vortex Rig",
-        "price": 80000,
-        "durability": 400,
+        "price": 120000,
+        "durability": 700,
         "max_ef": 5,
         "cooldown_min": 5,
-        "base_rate": 150,
+        "base_rate": 230,
+    },
+
+    "dominator_mk3": {
+        "name": "Dominator MK-III",
+        "price": 250000,
+        "durability": 1000,
+        "max_ef": 5,
+        "cooldown_min": 3,
+        "base_rate": 350,
+    },
+
+    "tiv_apocalypse": {
+        "name": "TIV Apocalypse",
+        "price": 600000,
+        "durability": 1600,
+        "max_ef": 5,
+        "cooldown_min": 2,
+        "base_rate": 550,
+    },
+
+    "omega_storm_platform": {
+        "name": "Omega Storm Platform",
+        "price": 1500000,
+        "durability": 3000,
+        "max_ef": 5,
+        "cooldown_min": 1,
+        "base_rate": 900,
     },
 }
 
 # thứ tự mua xe để check "xe tiếp theo" trong shop
-CAR_ORDER = ["rookie_truck", "storm_van", "armored_interceptor", "titan_vortex_rig"]
+CAR_ORDER = ["rookie_truck", "weather_scout", "storm_van", "storm_ranger", "armored_interceptor", "dominator_mk1"
+    "tiv_classic", "titan_vortex_rig", "dominator_mk3", "tiv_apocalypse", "omega_storm_platform"]
 
 # ---------------- EF SCALE ----------------
 # session_min: (min, max) phút bão tồn tại trước khi tan tự nhiên
