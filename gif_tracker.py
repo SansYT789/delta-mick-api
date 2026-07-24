@@ -2,8 +2,8 @@ import discord
 from firebase_admin import db
 
 ROLE_ID = 1529750231539908658  # ID role thưởng
-MILESTONE_STEP = 100
-REWARD_THRESHOLD = 1000
+MILESTONE_STEP = 10
+REWARD_THRESHOLD = 100
 
 async def add_gif(member: discord.Member):
     guild_id = str(member.guild.id)
@@ -16,8 +16,8 @@ async def add_gif(member: discord.Member):
             current = {}
         current["gif"] = current.get("gif", 0) + 1
         # đánh dấu ngay trong transaction để tránh 2 lần trao role
-        if current["gif"] >= REWARD_THRESHOLD and not current.get("reward_1000_claimed"):
-            current["reward_1000_claimed"] = True
+        if current["gif"] >= REWARD_THRESHOLD and not current.get("reward_100_claimed"):
+            current["reward_100_claimed"] = True
             current["_just_claimed"] = True  # cờ tạm, chỉ dùng ở lần trả về này
         else:
             current["_just_claimed"] = False
