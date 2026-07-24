@@ -1,9 +1,9 @@
 import discord
 from firebase_admin import db
 
-ROLE_ID = 1523217862154784781  # ID role thưởng
-MILESTONE_STEP = 1
-REWARD_THRESHOLD = 10
+ROLE_ID = 1529750231539908658  # ID role thưởng
+MILESTONE_STEP = 100
+REWARD_THRESHOLD = 1000
 
 async def add_gif(member: discord.Member):
     guild_id = str(member.guild.id)
