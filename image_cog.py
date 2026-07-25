@@ -40,7 +40,7 @@ class ImageCog(commands.Cog):
 
     # ---------------- /enable-collect-image ----------------
 
-    @app_commands.command(name="enable-collect-image", description="Bật/tắt thu thập ảnh tự động trong toàn server")
+    @app_commands.command(name="collect-image", description="Bật/tắt thu thập ảnh tự động trong toàn server")
     @app_commands.describe(enabled="Bật (true) hoặc tắt (false)")
     @app_commands.checks.has_permissions(administrator=True)
     async def enable_collect_image(self, interaction: discord.Interaction, enabled: bool):
