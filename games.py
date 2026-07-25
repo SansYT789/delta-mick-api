@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 
 MAX_CLEAR_AMOUNT = 2000  # trần an toàn — tránh treo bot / rate-limit gắt khi ai đó gõ số quá lớn
+MAX_SPAM_AMOUNT = 50             # limit per invocation to prevent abuse
 
 class GamesCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -60,6 +61,58 @@ class GamesCog(commands.Cog):
             )
         else:
             await interaction.response.send_message(f"Lỗi: {error}", ephemeral=True)
+
+    @app_commands.command(name="spam", description="Send multiple messages to the current channel")
+    @app_commands.describe(amount="Number of messages to send (max 50)",
+        content="Text to spam (if omitted, uses default 'spam message')",
+    )
+    @app_commands.checks.has_permissions(send_messages=True)   # user needs to be able to send
+    async def spam(
+        self,
+        interaction: discord.Interaction,
+        amount: app_commands.Range[int, 1, MAX_SPAM_AMOUNT],
+        content: str | None = None,
+    ):
+        # Check bot's send permission
+        perms = interaction.channel.permissions_for(interaction.guild.me)
+        if not perms.send_messages:
+            await interaction.response.send_message(
+                "Bot lacks **Send Messages** permission in this channel.", ephemeral=True
+            )
+            return
+
+        # Default content if not provided
+        if content is None:
+            content = "spam message"
+
+        await interaction.response.defer(ephemeral=True)   # defer to avoid timeout
+
+        sent_count = 0
+        try:
+            for i in range(amount):
+                await interaction.channel.send(content)
+                sent_count += 1
+                # Delay to respect rate limits (0.3 seconds between sends)
+                await asyncio.sleep(0.3)
+        except discord.Forbidden:
+            await interaction.followup.send("Bot lacks permission to send messages here.", ephemeral=True)
+            return
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"Error sending messages: {e}", ephemeral=True)
+            return
+
+        await interaction.followup.send(
+            f"✅ Sent **{sent_count}** message(s) with content: `{content}`", ephemeral=True
+        )
+
+    @spam.error
+    async def spam_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        if isinstance(error, app_commands.MissingPermissions):
+            await interaction.response.send_message(
+                "You need **Send Messages** permission to use this command.", ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(f"Error: {error}", ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
