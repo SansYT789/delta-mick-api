@@ -8,7 +8,7 @@ _DB_URL = "https://delta-mick-api-default-rtdb.firebaseio.com/"
 
 def init_firebase():
     if firebase_admin._apps:
-        return  # not init again
+        return  # đã init rồi
 
     cred_json = os.environ["FIREBASE_CREDENTIALS"]
     cred_dict = json.loads(cred_json)

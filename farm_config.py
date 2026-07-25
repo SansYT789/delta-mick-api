@@ -36,18 +36,18 @@ CROPS = {
     },
 }
 
-CROP_ORDER = ["mango", "lemon","orange","apple"]
+CROP_ORDER = ["mango", "lemon", "orange", "apple"]
 
-# ---------------- SẢN PHẨM & GIÁ BÁN (mango) ----------------
+# ---------------- SẢN PHẨM & GIÁ BÁN ----------------
 # key: "loại_trái" -> giá bán base (chưa nhân mutation)
 PRODUCE_PRICES = {
-    "mango_unripe": 3,    # xoài non
-    "mango_ripe": 7,      # xoài chín
-    "mango_rotten": 1,    # xoài thúi
+    "mango_unripe": 3,
+    "mango_ripe": 7,
+    "mango_rotten": 1,
 
-    "lemon_green": 5,     # chanh xanh
-    "lemon_yellow": 10,   # chanh vàng
-    "lemon_orange": 14,   # chanh cam
+    "lemon_green": 5,
+    "lemon_yellow": 10,
+    "lemon_orange": 14,
     
     "orange_green": 9,
     "orange_ripe": 18,
@@ -58,7 +58,6 @@ PRODUCE_PRICES = {
     "apple_rotten": 7,
 }
 
-# mỗi loại cây sẽ random ra 1 trong các "giai đoạn chín" khi thu hoạch
 PRODUCE_STAGES = {
     "mango": {
         "stages": ["mango_unripe", "mango_ripe", "mango_rotten"],
@@ -103,31 +102,31 @@ WATERING_CANS = {
     },
 }
 
-# ---------------- NÔNG DÂN (farmer tự động) ----------------
-FARMER_HIRE_COST_MANGO = 300
-FARMER_HIRE_DURATION_MIN = 120      # thuê 1 lần dùng được 2 tiếng, hết giờ tự mất
-FARMER_PERMANENT_COST_MANGO = 30000  # nâng cấp 1 lần để nông dân ở vĩnh viễn, không cần thuê lại
+# ---------------- NÔNG DÂN ----------------
+FARMER_HIRE_COST_MANGO = 500
+FARMER_HIRE_DURATION_MIN = 120      # thuê 2 tiếng/lần
+FARMER_PERMANENT_COST_MANGO = 30000  # nâng cấp nông dân vĩnh viễn
 FARMER_BASE = {
-    "work_duration_min": 30,   # mỗi X phút làm 1 "vòng việc" (tưới/trồng/thu hoạch)
-    "job_wait_sec": 30,         # chờ giữa các job trong 1 vòng (tưới xong -> đợi -> trồng lại...)
+    "work_duration_min": 10,   # mỗi X phút làm 1 "vòng việc"
+    "job_wait_sec": 10,         # chờ giữa các job trong 1 vòng
 }
-# nâng cấp nông dân: giảm work_duration, giảm job_wait, hoặc unlock chọn cây khác để tự trồng
+# nâng cấp nông dân: giảm work_duration, giảm job_wait
 FARMER_UPGRADE = {
-    "work_duration_reduction_min_per_level": 2,
+    "work_duration_reduction_min_per_level": 0.5,
     "min_work_duration_min": 5,
-    "job_wait_reduction_sec_per_level": 3,
+    "job_wait_reduction_sec_per_level": 0.3,
     "min_job_wait_sec": 1,
-    "max_level": 8,
-    "base_cost": 500,       # mango
+    "max_level": 10,
+    "base_cost": 750,       # mango
     "cost_growth": 1.3,
 }
 
 # ---------------- NÂNG CẤP NĂNG SUẤT ----------------
 YIELD_UPGRADE = {
     # mỗi level +% cơ hội x2 trái khi thu hoạch
-    "double_fruit_chance_per_level": 0.05,
+    "double_fruit_chance_per_level": 0.03,
     "max_level": 10,
-    "base_cost": 100,
+    "base_cost": 300,
     "cost_growth": 1.3,
 }
 WATER_SPEED_UPGRADE = {
@@ -135,19 +134,13 @@ WATER_SPEED_UPGRADE = {
     "cooldown_reduction_min_per_level": 5,
     "min_cooldown_min": 15,
     "max_level": 8,
-    "base_cost": 200,
+    "base_cost": 400,
     "cost_growth": 1.3,
 }
 
-AUTO_REPLANT_UPGRADE = {
-    "max_level": 5,
-    "base_cost": 300,
-    "cost_growth": 1.4,
-}
-
 # ---------------- Giá dụng cụ ----------------
-TOOL_PRICE_SCANNER = 100     # kính lúp (mango) — dụng cụ mua 1 lần trong shop, dùng mãi
-TOOL_MUTATION_PLUCKER = 400  # đồ gắp — chọn 1 mutation để gỡ khỏi trái
+TOOL_PRICE_SCANNER = 200     # kính lúp
+TOOL_MUTATION_PLUCKER = 800  # đồ gắp
 
 # ---------------- SPRINKLER ----------------
 # duration_min: hiệu lực kéo dài bao lâu sau khi đặt
@@ -155,35 +148,35 @@ TOOL_MUTATION_PLUCKER = 400  # đồ gắp — chọn 1 mutation để gỡ kh�
 # flood_mutation_chance: tỉ lệ ra mutation "ngập nước" khi thu hoạch trong lúc sprinkler hoạt động
 SPRINKLERS = {
     "basic": {
-        "name": "Vòi phun cơ bản",
+        "name": "Vòi phun Cơ Bản",
         "price": 60,
         "duration_min": 5,
         "progress_boost": 1,
         "flood_mutation_chance": 0.05,
     },
     "uncommon": {
-        "name": "Vòi phun khá phổ biến",
+        "name": "Vòi phun Không Phổ Biến",
         "price": 180,
         "duration_min": 10,
         "progress_boost": 2,
         "flood_mutation_chance": 0.12,
     },
     "rare": {
-        "name": "Vòi phun hiếm",
+        "name": "Vòi phun Hiếm",
         "price": 250,
         "duration_min": 15,
         "progress_boost": 3,
         "flood_mutation_chance": 0.25,
     },
     "legendary": {
-        "name": "Vòi phun huyền thoại",
+        "name": "Vòi phun Huyền Thoại",
         "price": 600,
         "duration_min": 20,
         "progress_boost": 5,
         "flood_mutation_chance": 0.45,
     },
     "master": {
-        "name": "Vòi phun bậc thầy",
+        "name": "Vòi phun Bậc Thầy",
         "price": 1200,
         "duration_min": 25,
         "progress_boost": 7,

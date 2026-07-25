@@ -3,20 +3,16 @@ import random
 
 import farm_config
 
-
 def get_crop_stats(crop_type: str) -> dict:
     return farm_config.CROPS[crop_type]
 
-
 def unlock_cost(crop_type: str) -> int:
     return farm_config.CROPS[crop_type]["unlock_cost"]
-
 
 def water_cooldown_min(water_speed_level: int) -> int:
     w = farm_config.WATER_SPEED_UPGRADE
     val = farm_config.WATER_COOLDOWN_MIN - water_speed_level * w["cooldown_reduction_min_per_level"]
     return max(w["min_cooldown_min"], val)
-
 
 def roll_water_progress(can_tier: str, sprinkler_active: bool, sprinkler_tier: str | None) -> float:
     lo, hi = farm_config.WATERING_CANS[can_tier]["progress_range"]
@@ -25,7 +21,6 @@ def roll_water_progress(can_tier: str, sprinkler_active: bool, sprinkler_tier: s
         progress += farm_config.SPRINKLERS[sprinkler_tier]["progress_boost"]
     return round(progress, 1)
 
-
 def upgrade_cost(kind: str, current_level: int) -> int:
     table = {
         "yield": farm_config.YIELD_UPGRADE,
@@ -33,7 +28,6 @@ def upgrade_cost(kind: str, current_level: int) -> int:
         "farmer": farm_config.FARMER_UPGRADE,
     }[kind]
     return int(table["base_cost"] * (table["cost_growth"] ** current_level))
-
 
 def farmer_stats(level: int) -> dict:
     f = farm_config.FARMER_UPGRADE
@@ -44,19 +38,11 @@ def farmer_stats(level: int) -> dict:
         "job_wait_sec": max(f["min_job_wait_sec"], job_wait),
     }
 
-
 def roll_produce_stage(crop_type: str) -> str:
     stages_cfg = farm_config.PRODUCE_STAGES[crop_type]
     return random.choices(stages_cfg["stages"], weights=stages_cfg["weights"], k=1)[0]
 
-
 def roll_mutations(weather: str, sprinkler_active: bool, sprinkler_tier: str | None) -> list[str]:
-    """
-    Roll các mutation cho 1 trái khi thu hoạch.
-    Stackable (giant, flooded) có thể ra cùng lúc.
-    Exclusive (gold, rainbow, radioactive) chỉ chọn tối đa 1 — ưu tiên roll lần lượt,
-    trái đầu tiên trúng thì dừng (tránh chồng lẫn nhau).
-    """
     result = []
     weather_effect = farm_config.WEATHER_MUTATION_EFFECT.get(weather, {})
 
@@ -68,9 +54,9 @@ def roll_mutations(weather: str, sprinkler_active: bool, sprinkler_tier: str | N
         if random.random() < chance:
             result.append(key)
 
-    # --- exclusive (chỉ 1 trong nhóm) ---
+    # --- exclusive ---
     exclusive_keys = list(farm_config.MUTATIONS_EXCLUSIVE.keys())
-    random.shuffle(exclusive_keys)  # tránh thiên vị luôn roll theo thứ tự cố định
+    random.shuffle(exclusive_keys)
     for key in exclusive_keys:
         cfg = farm_config.MUTATIONS_EXCLUSIVE[key]
         chance = cfg["base_chance"] + weather_effect.get(key, 0.0)
@@ -79,7 +65,6 @@ def roll_mutations(weather: str, sprinkler_active: bool, sprinkler_tier: str | N
             break  # chỉ 1 exclusive
 
     return result
-
 
 def compute_produce_value(produce: str, mutations: list[str]) -> int:
     base = farm_config.PRODUCE_PRICES[produce]
@@ -98,7 +83,6 @@ def compute_produce_value(produce: str, mutations: list[str]) -> int:
     value = base * stackable_mult * exclusive_mult
     return max(1, round(value))
 
-
 def is_farmer_active(farmer: dict, now: datetime.datetime) -> bool:
     """Farmer còn hoạt động không: đã thuê VÀ (permanent HOẶC chưa hết hạn thuê)."""
     if not farmer.get("hired"):
@@ -111,10 +95,8 @@ def is_farmer_active(farmer: dict, now: datetime.datetime) -> bool:
     until = hired_until if isinstance(hired_until, datetime.datetime) else datetime.datetime.fromisoformat(hired_until)
     return now < until
 
-
-def roll_harvest_quantity(name: str, yield_level: int) -> int:
-    """1 trái, hoặc x2 nếu trúng double_fruit_chance."""
-    base_yield=farm_config.CROPS[name].base_yield
+def roll_harvest_quantity(crop_type: str, yield_level: int) -> int:
+    base_yield = farm_config.CROPS[crop_type]["base_yield"]
     chance = max(0.0, min(0.9, yield_level * farm_config.YIELD_UPGRADE["double_fruit_chance_per_level"]))
     return base_yield*2 if random.random() < chance else base_yield
 

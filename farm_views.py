@@ -6,7 +6,6 @@ import farm_config
 import farm_logic
 import farm_store
 
-
 def _fmt_td(seconds: int) -> str:
     seconds = max(0, int(seconds))
     h, rem = divmod(seconds, 3600)
@@ -16,7 +15,6 @@ def _fmt_td(seconds: int) -> str:
     if m:
         return f"{m}p{s}s"
     return f"{s}s"
-
 
 def _water_remaining_sec(data: dict, guild_id: int, user_id: int) -> int:
     plot = data["plot"]
@@ -28,7 +26,6 @@ def _water_remaining_sec(data: dict, guild_id: int, user_id: int) -> int:
     remaining = cd_min * 60 - elapsed
     return max(0, int(remaining))
 
-
 def _sprinkler_active(plot: dict) -> tuple[bool, str | None]:
     if not plot.get("active_sprinkler_tier") or not plot.get("active_sprinkler_until"):
         return False, None
@@ -36,7 +33,6 @@ def _sprinkler_active(plot: dict) -> tuple[bool, str | None]:
     if datetime.datetime.utcnow() < until:
         return True, plot["active_sprinkler_tier"]
     return False, None
-
 
 def _farmer_status_text(farmer: dict, now: datetime.datetime) -> str:
     if not farmer.get("hired"):
@@ -52,19 +48,13 @@ def _farmer_status_text(farmer: dict, now: datetime.datetime) -> str:
     remaining = int((until - now).total_seconds())
     return f"✅ Còn {_fmt_td(remaining)}"
 
-
 # ==================== FARMER LAZY-CALC ====================
-
 def _process_farmer_offline_work(guild_id: int, user_id: int) -> list[str]:
     """
     Tính bù việc farmer đã làm khi user vắng mặt.
     Mỗi vòng: farmer tự mua hạt (trừ mango) + trồng, hoặc tưới, hoặc thu hoạch.
     Nếu farmer thuê tạm thời đã hết hạn, việc chỉ tính tới đúng mốc hired_until rồi dừng,
     farmer coi như đã rời đi (hired=False) sau khi xử lý xong phần việc còn lại.
-
-    Thiết kế: đọc state 1 lần (không transaction) để MÔ PHỎNG toàn bộ các tick trước,
-    rồi mới ghi kết quả cuối cùng vào transaction 1 lần — tránh side-effect (trừ mango)
-    bị lặp lại nếu Firebase transaction retry do xung đột ghi đồng thời.
     """
     data = farm_store.get_farm_data(guild_id, user_id)
     farmer = data["farmer"]
@@ -86,7 +76,6 @@ def _process_farmer_offline_work(guild_id: int, user_id: int) -> list[str]:
             hired_until_dt = farm_store.parse_iso(hired_until)
             will_expire = now >= hired_until_dt
         else:
-            # dữ liệu cũ thiếu hired_until -> coi như đã hết hạn, sa thải ngay, không mô phỏng việc
             farm_store.update_farm_data(guild_id, user_id, {"farmer/hired": False})
             return ["🚜 Hợp đồng nông dân đã hết hạn — anh ta đã rời đi."]
 
@@ -95,12 +84,11 @@ def _process_farmer_offline_work(guild_id: int, user_id: int) -> list[str]:
         last_processed, now, stats["work_duration_min"], stats["job_wait_sec"],
         hired_until=hired_until_dt,
     )
-    ticks = min(ticks, 200)  # trần an toàn — tránh vòng lặp khổng lồ nếu user biến mất cả tháng
+    ticks = min(ticks, 200)  # trần an toàn
 
     if ticks <= 0:
         return []
 
-    # --- mô phỏng thuần, không ghi DB ---
     crop_type = data["crop_type"]
     mango_available = farm_store.get_mango(guild_id, user_id)
     total_seed_cost = 0
@@ -112,14 +100,14 @@ def _process_farmer_offline_work(guild_id: int, user_id: int) -> list[str]:
         if not plot["planted"]:
             seed_cost = farm_config.CROPS[crop_type]["seed_cost"]
             if seed_cost > 0 and mango_available - total_seed_cost < seed_cost:
-                logs.append("⚠️ Nông dân hết mango để mua hạt giống, tạm dừng.")
+                logs.append("⚠️ Nông dân hết Mango🥭 để mua hạt giống, tạm dừng.")
                 break
             total_seed_cost += seed_cost
             plot["planted"] = True
             plot["seed_type"] = crop_type
             plot["progress"] = 0.0
             plot["last_water_at"] = None
-            logs.append(f"🌱 Nông dân đã mua hạt ({seed_cost} mango) và trồng cây mới.")
+            logs.append(f"🌱 Nông dân đã mua hạt ({seed_cost}🥭) và trồng cây mới.")
             continue
 
         needed = farm_config.CROPS[plot["seed_type"] or crop_type]["grow_progress_needed"]
@@ -152,7 +140,6 @@ def _process_farmer_offline_work(guild_id: int, user_id: int) -> list[str]:
     if will_expire:
         logs.append("🚜 Hợp đồng nông dân đã hết hạn — anh ta đã rời đi.")
 
-    # --- ghi kết quả 1 lần duy nhất ---
     if total_seed_cost > 0:
         farm_store.transaction_mango(guild_id, user_id, -total_seed_cost)
 
@@ -169,11 +156,8 @@ def _process_farmer_offline_work(guild_id: int, user_id: int) -> list[str]:
     farm_store.transaction_farm_data(guild_id, user_id, _apply)
     return logs[-6:]
 
-
-# ==================== MAIN FARM VIEW ====================
-
+# ==================== MAIN FARM ====================
 def build_farm_embed_and_view(guild_id: int, user_id: int, extra_logs: list[str] | None = None):
-    # xử lý bù farmer trước khi build embed, để số liệu hiển thị là mới nhất
     offline_logs = _process_farmer_offline_work(guild_id, user_id)
 
     data = farm_store.get_farm_data(guild_id, user_id)
@@ -236,10 +220,9 @@ def build_farm_embed_and_view(guild_id: int, user_id: int, extra_logs: list[str]
     view = FarmView(guild_id, user_id)
     return embed, view
 
-
 class FarmView(discord.ui.View):
     def __init__(self, guild_id: int, user_id: int):
-        super().__init__(timeout=120)
+        super().__init__(timeout=300)
         self.guild_id = guild_id
         self.user_id = user_id
 
@@ -262,7 +245,7 @@ class FarmView(discord.ui.View):
             seed_cost = farm_config.CROPS[crop_type]["seed_cost"]
             await interaction.response.send_message(
                 f"Bạn không có hạt giống **{farm_config.CROPS[crop_type]['name']}**. "
-                f"Mua ở `/shop` (mode Nông trại) — {seed_cost} mango/hạt.",
+                f"Mua ở `/shop` — {seed_cost} mango/hạt.",
                 ephemeral=True,
             )
             return
@@ -411,7 +394,7 @@ class FarmView(discord.ui.View):
 
         if not owned:
             await interaction.response.send_message(
-                "Bạn chưa sở hữu sprinkler nào. Mua ở `/shop` (mode Nông trại).", ephemeral=True
+                "Bạn chưa sở hữu sprinkler nào. Mua ở `/shop`.", ephemeral=True
             )
             return
 
@@ -423,7 +406,6 @@ class FarmView(discord.ui.View):
         view = discord.ui.View(timeout=60)
         view.add_item(SprinklerActivateDropdown(self.guild_id, self.user_id, owned))
         await interaction.response.send_message("Chọn sprinkler để kích hoạt:", view=view, ephemeral=True)
-
 
 class SprinklerActivateDropdown(discord.ui.Select):
     def __init__(self, guild_id: int, user_id: int, owned_sprinkler_ids: list[str]):
@@ -476,9 +458,7 @@ class SprinklerActivateDropdown(discord.ui.Select):
             content=f"💦 Đã kích hoạt **{cfg['name']}** trong {cfg['duration_min']} phút.", view=None
         )
 
-
 # ==================== NÂNG CẤP MENU ====================
-
 def build_upgrade_menu(guild_id: int, user_id: int):
     data = farm_store.get_farm_data(guild_id, user_id)
     mango = farm_store.get_mango(guild_id, user_id)
@@ -493,16 +473,15 @@ def build_upgrade_menu(guild_id: int, user_id: int):
 
     embed.add_field(
         name=f"📈 Năng suất (Lv.{yield_lvl})",
-        value=f"+{farm_config.YIELD_UPGRADE['double_fruit_chance_per_level']*100:.0f}% cơ hội x2 trái — {yield_cost} mango",
+        value=f"+{farm_config.YIELD_UPGRADE['double_fruit_chance_per_level']*100:.0f}% cơ hội x2 trái — {yield_cost}🥭",
         inline=False,
     )
     embed.add_field(
         name=f"⏱️ Tốc độ tưới (Lv.{water_lvl})",
-        value=f"-{farm_config.WATER_SPEED_UPGRADE['cooldown_reduction_min_per_level']} phút cooldown tưới — {water_cost} mango",
+        value=f"-{farm_config.WATER_SPEED_UPGRADE['cooldown_reduction_min_per_level']} phút cooldown tưới — {water_cost}🥭",
         inline=False,
     )
 
-    # unlock cây tiếp theo
     current_crop = data["crop_type"]
     next_crop = farm_config.CROPS[current_crop].get("next_unlock")
 
@@ -522,7 +501,6 @@ def build_upgrade_menu(guild_id: int, user_id: int):
         view.add_item(_UnlockCropBtn(guild_id, user_id, next_crop, cost))
 
     return embed, view
-
 
 class _UpgradeBtn(discord.ui.Button):
     def __init__(self, guild_id, user_id, kind, cost, label):
@@ -557,7 +535,6 @@ class _UpgradeBtn(discord.ui.Button):
         embed, view = build_upgrade_menu(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
-
 class _UnlockCropBtn(discord.ui.Button):
     def __init__(self, guild_id, user_id, crop_id, cost):
         super().__init__(label=f"Mở khoá {farm_config.CROPS[crop_id]['name']} ({cost} mango)", style=discord.ButtonStyle.success)
@@ -590,9 +567,7 @@ class _UnlockCropBtn(discord.ui.Button):
         embed, view = build_upgrade_menu(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
-
 # ==================== FARMER MENU (khi đã thuê) ====================
-
 def build_farmer_menu(guild_id: int, user_id: int):
     data = farm_store.get_farm_data(guild_id, user_id)
     mango = farm_store.get_mango(guild_id, user_id)
@@ -626,7 +601,6 @@ def build_farmer_menu(guild_id: int, user_id: int):
         view.add_item(_FarmerPermanentBtn(guild_id, user_id))
     return embed, view
 
-
 class _FarmerUpgradeBtn(discord.ui.Button):
     def __init__(self, guild_id, user_id, cost):
         super().__init__(label=f"Nâng cấp nông dân ({cost} mango)", style=discord.ButtonStyle.primary)
@@ -657,7 +631,6 @@ class _FarmerUpgradeBtn(discord.ui.Button):
         embed, view = build_farmer_menu(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
-
 class _FarmerPermanentBtn(discord.ui.Button):
     def __init__(self, guild_id, user_id):
         cost = farm_config.FARMER_PERMANENT_COST_MANGO
@@ -668,7 +641,7 @@ class _FarmerPermanentBtn(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
+            await interaction.response.send_message("Không phải cửa hàng của bạn.", ephemeral=True)
             return
 
         mango = farm_store.get_mango(self.guild_id, self.user_id)

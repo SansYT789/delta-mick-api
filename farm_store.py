@@ -1,8 +1,6 @@
 """
-Data layer cho hệ thống farm.
-
 Schema:
-guilds/{guild_id}/users/{user_id}/farm/
+users/{user_id}/farm/
     crop_type: "mango" | "lemon"          # cây đang active
     unlocked_crops: {"mango": True, "lemon": False}
     seed_inventory: {"mango": 2, "lemon": 0}   # số hạt giống đã mua, chưa trồng
@@ -34,8 +32,6 @@ guilds/{guild_id}/weather/
     current: str
     changed_at: iso
     next_change_at: iso
-
-Mango — đọc/ghi vào guilds/{g}/users/{u}/tornado/mango.
 """
 
 import datetime
@@ -48,7 +44,7 @@ import farm_config
 DEFAULT_FARM_DATA = {
     "crop_type": "mango",
     "unlocked_crops": {"mango": True, "lemon": False, "orange": False, "apple": False},
-    "seed_inventory": {"mango": 0, "lemon": 0, "orange": 0, "apple": 0, },
+    "seed_inventory": {"mango": 0, "lemon": 0, "orange": 0, "apple": 0},
     "plot": {
         "planted": False,
         "seed_type": None,
@@ -65,29 +61,22 @@ DEFAULT_FARM_DATA = {
     "inventory": {},
 }
 
-
 def _farm_ref(guild_id: int, user_id: int):
-    return db.reference(f"guilds/{guild_id}/users/{user_id}/farm")
-
+    return db.reference(f"users/{user_id}/farm")
 
 def _mango_ref(guild_id: int, user_id: int):
-    return db.reference(f"guilds/{guild_id}/users/{user_id}/tornado/mango")
-
+    return db.reference(f"users/{user_id}/mango")
 
 def _weather_ref(guild_id: int):
     return db.reference(f"guilds/{guild_id}/weather")
 
-
 def now_iso() -> str:
     return datetime.datetime.utcnow().isoformat()
-
 
 def parse_iso(s: str) -> datetime.datetime:
     return datetime.datetime.fromisoformat(s)
 
-
 def _deep_merge_defaults(data: dict, defaults: dict) -> dict:
-    """Merge nông cho từng field top-level + 1 lớp con (đủ dùng cho schema này)."""
     merged = dict(defaults)
     if not data:
         return merged
@@ -100,7 +89,6 @@ def _deep_merge_defaults(data: dict, defaults: dict) -> dict:
             merged[k] = v
     return merged
 
-
 def get_farm_data(guild_id: int, user_id: int) -> dict:
     ref = _farm_ref(guild_id, user_id)
     data = ref.get()
@@ -109,10 +97,8 @@ def get_farm_data(guild_id: int, user_id: int) -> dict:
         return dict(DEFAULT_FARM_DATA)
     return _deep_merge_defaults(data, DEFAULT_FARM_DATA)
 
-
 def update_farm_data(guild_id: int, user_id: int, patch: dict):
     _farm_ref(guild_id, user_id).update(patch)
-
 
 def transaction_farm_data(guild_id: int, user_id: int, fn):
     ref = _farm_ref(guild_id, user_id)
@@ -123,16 +109,12 @@ def transaction_farm_data(guild_id: int, user_id: int, fn):
 
     return ref.transaction(_txn)
 
-
-# ---------------- MANGO (dùng chung với tornado) ----------------
-
+# ---------------- MANGO----------------
 def get_mango(guild_id: int, user_id: int) -> int:
     val = _mango_ref(guild_id, user_id).get()
     return val or 0
 
-
 def transaction_mango(guild_id: int, user_id: int, delta: int) -> int:
-    """Cộng/trừ mango an toàn, trả về số dư mới. Không cho âm."""
     ref = _mango_ref(guild_id, user_id)
 
     def _txn(current):
@@ -150,18 +132,14 @@ def set_mango(guild_id: int, user_id: int, amount: int):
     return amount
 
 # ---------------- INVENTORY ----------------
-
 def inventory_key(produce: str, mutations: list[str]) -> str:
-    """Chuẩn hoá key inventory: produce|mut1,mut2 (mutation đã sort để key ổn định)."""
     sorted_muts = ",".join(sorted(mutations)) if mutations else ""
     return f"{produce}|{sorted_muts}"
-
 
 def parse_inventory_key(key: str) -> tuple[str, list[str]]:
     produce, _, muts = key.partition("|")
     mutations = muts.split(",") if muts else []
     return produce, mutations
-
 
 def add_to_inventory(guild_id: int, user_id: int, produce: str, mutations: list[str], qty: int = 1):
     key = inventory_key(produce, mutations)
@@ -173,9 +151,7 @@ def add_to_inventory(guild_id: int, user_id: int, produce: str, mutations: list[
 
     return transaction_farm_data(guild_id, user_id, _add)
 
-
 def remove_from_inventory(guild_id: int, user_id: int, key: str, qty: int) -> bool:
-    """Trả về True nếu xoá thành công (đủ số lượng), False nếu không đủ."""
     result_holder = {"ok": False}
 
     def _remove(d):
@@ -195,20 +171,13 @@ def remove_from_inventory(guild_id: int, user_id: int, key: str, qty: int) -> bo
     transaction_farm_data(guild_id, user_id, _remove)
     return result_holder["ok"]
 
-
-# ---------------- WEATHER (cấp guild) ----------------
-
+# ---------------- WEATHER ----------------
 def _roll_weather() -> str:
     types = list(farm_config.WEATHER_TYPES.keys())
     weights = [farm_config.WEATHER_TYPES[t]["weight"] for t in types]
     return random.choices(types, weights=weights, k=1)[0]
 
-
 def get_current_weather(guild_id: int) -> str:
-    """
-    Lazy weather: nếu đã quá next_change_at thì random thời tiết mới và lưu lại.
-    Toàn bộ guild dùng chung 1 thời tiết.
-    """
     ref = _weather_ref(guild_id)
     data = ref.get()
     now = datetime.datetime.utcnow()
@@ -225,7 +194,6 @@ def get_current_weather(guild_id: int) -> str:
 
     next_change_at = parse_iso(data["next_change_at"])
     if now >= next_change_at:
-        # có thể đã trôi qua nhiều chu kỳ nếu không ai check lâu — chỉ cần roll 1 lần mới nhất
         new_weather = _roll_weather()
         next_change = now + datetime.timedelta(minutes=farm_config.WEATHER_CYCLE_MIN)
         ref.update({
