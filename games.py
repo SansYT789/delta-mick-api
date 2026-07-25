@@ -127,5 +127,58 @@ class GamesCog(commands.Cog):
         else:
             await interaction.response.send_message(f"Lỗi: {error}", ephemeral=True)
 
+    @app_commands.command(name="givemango", description="Cho người chơi mango")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def givemango(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        amount: app_commands.Range[int, 1],
+    ):
+        new = farm_store.transaction_mango(
+            interaction.guild.id,
+            user.id,
+            amount
+        )
+
+        await interaction.response.send_message(
+            f"✅ Đã cho {user.mention} **{amount}** 🥭.\nHiện có: **{new}** 🥭"
+        )
+
+    @app_commands.command(name="setmango", description="Đặt số mango")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def setmango(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+        amount: app_commands.Range[int, 0],
+    ):
+        farm_store.set_mango(
+            interaction.guild.id,
+            user.id,
+            amount
+        )
+
+        await interaction.response.send_message(
+            f"✅ Đã đặt mango của {user.mention} thành **{amount}** 🥭"
+        )
+
+    @app_commands.command(name="deletemango", description="Xóa toàn bộ mango")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def deletemango(
+        self,
+        interaction: discord.Interaction,
+        user: discord.Member,
+    ):
+        farm_store.set_mango(
+            interaction.guild.id,
+            user.id,
+            0
+        )
+
+        await interaction.response.send_message(
+            f"🗑️ Đã xóa toàn bộ mango của {user.mention}."
+        )        
+
 async def setup(bot: commands.Bot):
     await bot.add_cog(GamesCog(bot))
