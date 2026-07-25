@@ -131,11 +131,12 @@ def _process_farmer_offline_work(guild_id: int, user_id: int) -> list[str]:
             plot["last_water_at"] = now.isoformat()
             logs.append(f"💧 Nông dân đã tưới cây (+{gain} progress).")
         else:
-            stage = farm_logic.roll_produce_stage(plot["seed_type"] or crop_type)
+            type = plot["seed_type"] or crop_type
+            stage = farm_logic.roll_produce_stage(type)
             sprinkler_active, sprinkler_tier = _sprinkler_active(plot)
             weather = farm_store.get_current_weather(guild_id)
             mutations = farm_logic.roll_mutations(weather, sprinkler_active, sprinkler_tier)
-            qty = farm_logic.roll_harvest_quantity(data["upgrades"]["yield_level"])
+            qty = farm_logic.roll_harvest_quantity(type, data["upgrades"]["yield_level"])
 
             key = farm_store.inventory_key(stage, mutations)
             inventory_delta[key] = inventory_delta.get(key, 0) + qty
@@ -332,7 +333,7 @@ class FarmView(discord.ui.View):
         sprinkler_active, sprinkler_tier = _sprinkler_active(plot)
         weather = farm_store.get_current_weather(self.guild_id)
         mutations = farm_logic.roll_mutations(weather, sprinkler_active, sprinkler_tier)
-        qty = farm_logic.roll_harvest_quantity(data["upgrades"]["yield_level"])
+        qty = farm_logic.roll_harvest_quantity(crop_type, data["upgrades"]["yield_level"])
 
         def _harvest(d):
             key = farm_store.inventory_key(stage, mutations)

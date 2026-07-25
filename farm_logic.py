@@ -112,11 +112,11 @@ def is_farmer_active(farmer: dict, now: datetime.datetime) -> bool:
     return now < until
 
 
-def roll_harvest_quantity(yield_level: int) -> int:
+def roll_harvest_quantity(name: str, yield_level: int) -> int:
     """1 trái, hoặc x2 nếu trúng double_fruit_chance."""
-    chance = min(0.9, yield_level * farm_config.YIELD_UPGRADE["double_fruit_chance_per_level"])
-    return 2 if random.random() < chance else 1
-
+    base_yield=farm_config.CROPS[name].base_yield
+    chance = max(0.0, min(0.9, yield_level * farm_config.YIELD_UPGRADE["double_fruit_chance_per_level"]))
+    return base_yield*2 if random.random() < chance else base_yield
 
 def simulate_farmer_ticks(
     last_processed_at: datetime.datetime,

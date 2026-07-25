@@ -35,7 +35,7 @@ guilds/{guild_id}/weather/
     changed_at: iso
     next_change_at: iso
 
-Mango (tiền tệ) dùng CHUNG với tornado — đọc/ghi vào guilds/{g}/users/{u}/tornado/mango.
+Mango — đọc/ghi vào guilds/{g}/users/{u}/tornado/mango.
 """
 
 import datetime
@@ -47,8 +47,8 @@ import farm_config
 
 DEFAULT_FARM_DATA = {
     "crop_type": "mango",
-    "unlocked_crops": {"mango": True, "lemon": False},
-    "seed_inventory": {"mango": 0, "lemon": 0},
+    "unlocked_crops": {"mango": True, "lemon": False, "orange": False, "apple": False},
+    "seed_inventory": {"mango": 0, "lemon": 0, "orange": 0, "apple": 0, },
     "plot": {
         "planted": False,
         "seed_type": None,
@@ -123,7 +123,8 @@ def transaction_farm_data(guild_id: int, user_id: int, fn):
 
     return ref.transaction(_txn)
 
-# ---------------- MANGO ----------------
+
+# ---------------- MANGO (dùng chung với tornado) ----------------
 
 def get_mango(guild_id: int, user_id: int) -> int:
     val = _mango_ref(guild_id, user_id).get()
