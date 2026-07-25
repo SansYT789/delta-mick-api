@@ -105,7 +105,7 @@ CARS = {
 }
 
 # thứ tự mua xe để check "xe tiếp theo" trong shop
-CAR_ORDER = ["rookie_truck", "weather_scout", "storm_van", "storm_ranger", "armored_interceptor", "dominator_mk1"
+CAR_ORDER = ["rookie_truck", "weather_scout", "storm_van", "storm_ranger", "armored_interceptor", "dominator_mk1",
     "tiv_classic", "titan_vortex_rig", "dominator_mk3", "tiv_apocalypse", "omega_storm_platform"]
 
 # ---------------- EF SCALE ----------------
