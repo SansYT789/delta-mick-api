@@ -16,7 +16,7 @@ class GamesCog(commands.Cog):
     @app_commands.command(name="shop", description="Mở cửa hàng")
     async def shop(self, interaction: discord.Interaction):
         embed, view = farm_shop.build_farm_shop_embed_and_view(interaction.guild.id, interaction.user.id)
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(name="farm", description="Mở nông trại của bạn")
     async def farm(self, interaction: discord.Interaction):
