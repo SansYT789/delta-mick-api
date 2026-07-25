@@ -10,7 +10,7 @@ CARS = {
         "durability": 100,
         "max_ef": 2,
         "cooldown_min": 20,
-        "base_rate": 40,
+        "base_rate": 80,
     },
 
     "weather_scout": {
@@ -19,7 +19,7 @@ CARS = {
         "durability": 130,
         "max_ef": 2,
         "cooldown_min": 17,
-        "base_rate": 55,
+        "base_rate": 120,
     },
 
     "storm_van": {
@@ -28,7 +28,7 @@ CARS = {
         "durability": 150,
         "max_ef": 3,
         "cooldown_min": 15,
-        "base_rate": 65,
+        "base_rate": 135,
     },
 
     "storm_ranger": {
@@ -37,7 +37,7 @@ CARS = {
         "durability": 190,
         "max_ef": 3,
         "cooldown_min": 13,
-        "base_rate": 80,
+        "base_rate": 175,
     },
 
     "armored_interceptor": {
@@ -46,7 +46,7 @@ CARS = {
         "durability": 250,
         "max_ef": 4,
         "cooldown_min": 10,
-        "base_rate": 100,
+        "base_rate": 210,
     },
 
     "dominator_mk1": {
@@ -55,7 +55,7 @@ CARS = {
         "durability": 350,
         "max_ef": 4,
         "cooldown_min": 8,
-        "base_rate": 130,
+        "base_rate": 260,
     },
 
     "tiv_classic": {
@@ -64,7 +64,7 @@ CARS = {
         "durability": 500,
         "max_ef": 5,
         "cooldown_min": 7,
-        "base_rate": 170,
+        "base_rate": 330,
     },
 
     "titan_vortex_rig": {
@@ -73,7 +73,7 @@ CARS = {
         "durability": 700,
         "max_ef": 5,
         "cooldown_min": 5,
-        "base_rate": 230,
+        "base_rate": 450,
     },
 
     "dominator_mk3": {
@@ -82,7 +82,7 @@ CARS = {
         "durability": 1000,
         "max_ef": 5,
         "cooldown_min": 3,
-        "base_rate": 350,
+        "base_rate": 700,
     },
 
     "tiv_apocalypse": {
@@ -91,7 +91,7 @@ CARS = {
         "durability": 1600,
         "max_ef": 5,
         "cooldown_min": 2,
-        "base_rate": 550,
+        "base_rate": 1200,
     },
 
     "omega_storm_platform": {
@@ -100,7 +100,7 @@ CARS = {
         "durability": 3000,
         "max_ef": 5,
         "cooldown_min": 1,
-        "base_rate": 900,
+        "base_rate": 2000,
     },
 }
 
@@ -121,7 +121,7 @@ EF_SCALE = {
     5: {"session_min": (10, 15), "dmg_tick": (24, 36), "payout_mult": 4.0},
 }
 
-TICK_SECONDS = 5  # 1 tick sự kiện = 5s real-time
+TICK_SECONDS = 15  # 1 tick sự kiện = 15s real-time
 
 # ---------------- SỰ KIỆN MỖI TICK ----------------
 # trọng số random (cộng lại không cần bằng 100, dùng random.choices weights)
