@@ -1,9 +1,11 @@
 import datetime
+import io
 
 import discord
 
 import farm_config
 import farm_logic
+import farm_render
 import farm_store
 
 def _fmt_td(seconds: int) -> str:
@@ -80,6 +82,12 @@ def _process_farmer_offline_work(guild_id: int, user_id: int) -> list[str]:
             return ["🚜 Hợp đồng nông dân đã hết hạn — anh ta đã rời đi."]
 
     stats = farm_logic.farmer_stats(farmer.get("level", 0))
+    cycle_sec = stats["work_duration_min"] * 60 + stats["job_wait_sec"]
+
+    elapsed_sec = (now - last_processed).total_seconds()
+    if elapsed_sec < cycle_sec and not will_expire:
+        return []
+
     ticks = farm_logic.simulate_farmer_ticks(
         last_processed, now, stats["work_duration_min"], stats["job_wait_sec"],
         hired_until=hired_until_dt,
@@ -87,6 +95,9 @@ def _process_farmer_offline_work(guild_id: int, user_id: int) -> list[str]:
     ticks = min(ticks, 200)  # trần an toàn
 
     if ticks <= 0:
+        if will_expire:
+            farm_store.update_farm_data(guild_id, user_id, {"farmer/hired": False})
+            return ["🚜 Hợp đồng nông dân đã hết hạn — anh ta đã rời đi."]
         return []
 
     crop_type = data["crop_type"]
@@ -95,6 +106,9 @@ def _process_farmer_offline_work(guild_id: int, user_id: int) -> list[str]:
     plot = dict(data["plot"])
     inventory_delta: dict[str, int] = {}
     logs: list[str] = []
+    # Đọc weather 1 lần duy nhất cho cả batch offline-catchup thay vì mỗi tick 1 lần —
+    # tránh hàng trăm read Firebase thừa khi farmer bù nhiều vòng cùng lúc.
+    weather = farm_store.get_current_weather(guild_id)
 
     for _ in range(ticks):
         if not plot["planted"]:
@@ -122,7 +136,6 @@ def _process_farmer_offline_work(guild_id: int, user_id: int) -> list[str]:
             type = plot["seed_type"] or crop_type
             stage = farm_logic.roll_produce_stage(type)
             sprinkler_active, sprinkler_tier = _sprinkler_active(plot)
-            weather = farm_store.get_current_weather(guild_id)
             mutations = farm_logic.roll_mutations(weather, sprinkler_active, sprinkler_tier)
             qty = farm_logic.roll_harvest_quantity(type, data["upgrades"]["yield_level"])
 
@@ -217,8 +230,25 @@ def build_farm_embed_and_view(guild_id: int, user_id: int, extra_logs: list[str]
     if extra_logs:
         embed.add_field(name="Vừa xong", value="\n".join(extra_logs), inline=False)
 
+    sprinkler_active, _ = _sprinkler_active(plot)
+    needed_for_render = crop_stats["grow_progress_needed"]
+    stage_preview = None
+    if plot["planted"] and plot["progress"] >= needed_for_render:
+        stage_preview = farm_config.PRODUCE_STAGES[plot["seed_type"] or crop_type]["stages"][1]  # stage "chín" để preview
+
+    image_bytes = farm_render.render_farm_image(
+        crop_type=plot["seed_type"] or crop_type,
+        planted=plot["planted"],
+        progress=plot["progress"] if plot["planted"] else 0.0,
+        needed=needed_for_render,
+        stage_preview=stage_preview,
+        sprinkler_active=sprinkler_active,
+    )
+    file = discord.File(fp=io.BytesIO(image_bytes), filename="farm.png")
+    embed.set_image(url="attachment://farm.png")
+
     view = FarmView(guild_id, user_id)
-    return embed, view
+    return embed, view, file
 
 class FarmView(discord.ui.View):
     def __init__(self, guild_id: int, user_id: int):
@@ -259,8 +289,8 @@ class FarmView(discord.ui.View):
             return d
 
         farm_store.transaction_farm_data(self.guild_id, self.user_id, _plant)
-        embed, view = build_farm_embed_and_view(self.guild_id, self.user_id, extra_logs=["🌱 Bạn đã trồng cây mới."])
-        await interaction.response.edit_message(embed=embed, view=view)
+        embed, view, file = build_farm_embed_and_view(self.guild_id, self.user_id, extra_logs=["🌱 Bạn đã trồng cây mới."])
+        await interaction.response.edit_message(embed=embed, view=view, attachments=[file])
 
     @discord.ui.button(label="💧 Tưới cây", style=discord.ButtonStyle.primary)
     async def water(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -291,10 +321,10 @@ class FarmView(discord.ui.View):
             return d
 
         farm_store.transaction_farm_data(self.guild_id, self.user_id, _water)
-        embed, view = build_farm_embed_and_view(
+        embed, view, file = build_farm_embed_and_view(
             self.guild_id, self.user_id, extra_logs=[f"💧 Đã tưới cây (+{gain} progress)."]
         )
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=embed, view=view, attachments=[file])
 
     @discord.ui.button(label="🧺 Thu hoạch", style=discord.ButtonStyle.success)
     async def harvest(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -335,11 +365,11 @@ class FarmView(discord.ui.View):
         farm_store.transaction_farm_data(self.guild_id, self.user_id, _harvest)
 
         mut_text = f" ({', '.join(farm_config.MUTATIONS_STACKABLE.get(m, farm_config.MUTATIONS_EXCLUSIVE.get(m, {})).get('name', m) for m in mutations)})" if mutations else ""
-        embed, view = build_farm_embed_and_view(
+        embed, view, file = build_farm_embed_and_view(
             self.guild_id, self.user_id,
             extra_logs=[f"🧺 Thu hoạch {qty}x **{stage}**{mut_text}!"],
         )
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=embed, view=view, attachments=[file])
 
     @discord.ui.button(label="⚙️ Nâng cấp", style=discord.ButtonStyle.secondary)
     async def upgrades(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -358,19 +388,6 @@ class FarmView(discord.ui.View):
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
             return
 
-        mango = farm_store.get_mango(self.guild_id, self.user_id)
-        if mango < farm_config.FARMER_HIRE_COST_MANGO:
-            await interaction.response.send_message(
-                f"Cần **{farm_config.FARMER_HIRE_COST_MANGO} mango** để thuê nông dân (bạn có {mango}).",
-                ephemeral=True,
-            )
-            return
-
-        new_balance = farm_store.transaction_mango(self.guild_id, self.user_id, -farm_config.FARMER_HIRE_COST_MANGO)
-        if new_balance is None or new_balance < 0:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-
         hired_until = (now + datetime.timedelta(minutes=farm_config.FARMER_HIRE_DURATION_MIN)).isoformat()
 
         def _hire(d):
@@ -379,12 +396,18 @@ class FarmView(discord.ui.View):
             d["farmer"]["last_processed_at"] = now.isoformat()
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _hire)
-        embed, view = build_farm_embed_and_view(
+        ok, msg = farm_store.spend_mango_and_apply(
+            self.guild_id, self.user_id, farm_config.FARMER_HIRE_COST_MANGO, _hire
+        )
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
+        embed, view, file = build_farm_embed_and_view(
             self.guild_id, self.user_id,
             extra_logs=[f"🚜 Đã thuê nông dân ({farm_config.FARMER_HIRE_DURATION_MIN} phút)! Anh ta sẽ tự làm việc kể cả khi bạn offline."],
         )
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=embed, view=view, attachments=[file])
 
     @discord.ui.button(label="💦 Kích hoạt sprinkler", style=discord.ButtonStyle.secondary)
     async def activate_sprinkler(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -515,23 +538,17 @@ class _UpgradeBtn(discord.ui.Button):
             await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
             return
 
-        mango = farm_store.get_mango(self.guild_id, self.user_id)
-        if mango < self.cost:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-
-        new_balance = farm_store.transaction_mango(self.guild_id, self.user_id, -self.cost)
-        if new_balance is None:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-
         field = "yield_level" if self.kind == "yield" else "water_speed_level"
 
         def _upgrade(d):
             d["upgrades"][field] += 1
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _upgrade)
+        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.cost, _upgrade)
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
         embed, view = build_upgrade_menu(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -548,22 +565,16 @@ class _UnlockCropBtn(discord.ui.Button):
             await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
             return
 
-        mango = farm_store.get_mango(self.guild_id, self.user_id)
-        if mango < self.cost:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-
-        new_balance = farm_store.transaction_mango(self.guild_id, self.user_id, -self.cost)
-        if new_balance is None:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-
         def _unlock(d):
             d["unlocked_crops"][self.crop_id] = True
             d["crop_type"] = self.crop_id  # tự chuyển sang cây mới sau khi unlock
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _unlock)
+        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.cost, _unlock)
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
         embed, view = build_upgrade_menu(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -613,21 +624,15 @@ class _FarmerUpgradeBtn(discord.ui.Button):
             await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
             return
 
-        mango = farm_store.get_mango(self.guild_id, self.user_id)
-        if mango < self.cost:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-
-        new_balance = farm_store.transaction_mango(self.guild_id, self.user_id, -self.cost)
-        if new_balance is None:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-
         def _upgrade(d):
             d["farmer"]["level"] += 1
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _upgrade)
+        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.cost, _upgrade)
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
         embed, view = build_farmer_menu(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -644,24 +649,16 @@ class _FarmerPermanentBtn(discord.ui.Button):
             await interaction.response.send_message("Không phải cửa hàng của bạn.", ephemeral=True)
             return
 
-        mango = farm_store.get_mango(self.guild_id, self.user_id)
-        if mango < self.cost:
-            await interaction.response.send_message(
-                f"Cần {self.cost:,} mango (bạn có {mango:,}).", ephemeral=True
-            )
-            return
-
-        new_balance = farm_store.transaction_mango(self.guild_id, self.user_id, -self.cost)
-        if new_balance is None:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-
         def _make_permanent(d):
             d["farmer"]["permanent"] = True
             d["farmer"]["hired"] = True
             d["farmer"]["hired_until"] = None
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _make_permanent)
+        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.cost, _make_permanent)
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
         embed, view = build_farmer_menu(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)

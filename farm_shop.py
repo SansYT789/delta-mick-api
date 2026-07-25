@@ -125,21 +125,16 @@ class _BuySeedBtn(discord.ui.Button):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Không phải cửa hàng của bạn.", ephemeral=True)
             return
-        mango = farm_store.get_mango(self.guild_id, self.user_id)
-        if mango < self.price:
-            await interaction.response.send_message("Không đủ mango🥭.", ephemeral=True)
-            return
-        new_balance = farm_store.transaction_mango(self.guild_id, self.user_id, -self.price)
-        if new_balance is None:
-            await interaction.response.send_message("Không đủ mango🥭.", ephemeral=True)
-            return
-
         def _buy(d):
             d.setdefault("seed_inventory", {})
             d["seed_inventory"][self.crop_id] = d["seed_inventory"].get(self.crop_id, 0) + 1
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _buy)
+        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.price, _buy)
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
         embed, view = _build_seed_shop(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -176,20 +171,15 @@ class _BuyCanBtn(discord.ui.Button):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Không phải cửa hàng của bạn.", ephemeral=True)
             return
-        mango = farm_store.get_mango(self.guild_id, self.user_id)
-        if mango < self.price:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-        new_balance = farm_store.transaction_mango(self.guild_id, self.user_id, -self.price)
-        if new_balance is None:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-
         def _buy(d):
             d["watering_can"] = self.can_id
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _buy)
+        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.price, _buy)
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
         embed, view = _build_can_shop(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -229,20 +219,15 @@ class _BuyToolBtn(discord.ui.Button):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Không phải cửa hàng của bạn.", ephemeral=True)
             return
-        mango = farm_store.get_mango(self.guild_id, self.user_id)
-        if mango < self.price:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-        new_balance = farm_store.transaction_mango(self.guild_id, self.user_id, -self.price)
-        if new_balance is None:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-
         def _buy(d):
             d["tools"][self.tool_key] = True
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _buy)
+        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.price, _buy)
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
         embed, view = _build_tool_shop(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -282,21 +267,16 @@ class _BuySprinklerBtn(discord.ui.Button):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Không phải cửa hàng của bạn.", ephemeral=True)
             return
-        mango = farm_store.get_mango(self.guild_id, self.user_id)
-        if mango < self.price:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-        new_balance = farm_store.transaction_mango(self.guild_id, self.user_id, -self.price)
-        if new_balance is None:
-            await interaction.response.send_message("Không đủ mango.", ephemeral=True)
-            return
-
         def _buy(d):
             d.setdefault("sprinkler_inventory", {})
             d["sprinkler_inventory"][self.sprinkler_id] = d["sprinkler_inventory"].get(self.sprinkler_id, 0) + 1
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _buy)
+        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.price, _buy)
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
         embed, view = _build_sprinkler_shop(self.guild_id, self.user_id)
         await interaction.response.edit_message(
             content=f"✅ Đã mua **{farm_config.SPRINKLERS[self.sprinkler_id]['name']}**. Kích hoạt trong `/farm`.",

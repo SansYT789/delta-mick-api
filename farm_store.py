@@ -114,17 +114,40 @@ def get_mango(guild_id: int, user_id: int) -> int:
     val = _mango_ref(guild_id, user_id).get()
     return val or 0
 
-def transaction_mango(guild_id: int, user_id: int, delta: int) -> int:
+def transaction_mango(guild_id: int, user_id: int, delta: int):
     ref = _mango_ref(guild_id, user_id)
+    failed = {"insufficient": False}
 
     def _txn(current):
         current = current or 0
         new_val = current + delta
         if new_val < 0:
-            return current  # không đủ, giữ nguyên
+            failed["insufficient"] = True
+            return current
         return new_val
 
-    return ref.transaction(_txn)
+    result = ref.transaction(_txn)
+    if failed["insufficient"]:
+        return None
+    return result
+
+def spend_mango_and_apply(guild_id: int, user_id: int, cost: int, apply_fn) -> tuple[bool, str]:
+    if cost < 0:
+        raise ValueError("cost phải >= 0")
+
+    if cost > 0:
+        new_balance = transaction_mango(guild_id, user_id, -cost)
+        if new_balance is None:
+            return False, "Không đủ mango."
+
+    try:
+        transaction_farm_data(guild_id, user_id, apply_fn)
+    except Exception:
+        if cost > 0:
+            transaction_mango(guild_id, user_id, cost)  # hoàn tiền
+        return False, "Có lỗi xảy ra khi xử lý, giao dịch đã được hoàn tác."
+
+    return True, ""
 
 def set_mango(guild_id: int, user_id: int, amount: int):
     amount = max(0, int(amount))

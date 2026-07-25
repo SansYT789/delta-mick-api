@@ -7,6 +7,7 @@ import farm_views
 import farm_store
 
 MAX_CLEAR_AMOUNT = 2000  # trần an toàn
+BOT_OWNER_ID = 985004175110848512  # chỉ user này được dùng /manage-mango
 
 class GamesCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -19,8 +20,8 @@ class GamesCog(commands.Cog):
 
     @app_commands.command(name="farm", description="Mở nông trại của bạn")
     async def farm(self, interaction: discord.Interaction):
-        embed, view = farm_views.build_farm_embed_and_view(interaction.guild.id, interaction.user.id)
-        await interaction.response.send_message(embed=embed, view=view)
+        embed, view, file = farm_views.build_farm_embed_and_view(interaction.guild.id, interaction.user.id)
+        await interaction.response.send_message(embed=embed, view=view, file=file)
 
     @app_commands.command(name="mango", description="Xem số mango của bạn hoặc người khác")
     @app_commands.describe(user="Người muốn xem (bỏ trống = xem của bạn)")
@@ -86,18 +87,23 @@ class GamesCog(commands.Cog):
         else:
             await interaction.response.send_message(f"Lỗi: {error}", ephemeral=True)
 
-    @app_commands.command(name="manage-mango", description="Chỉnh mango cho người dùng (admin)")
+    @app_commands.command(name="manage-mango", description="Chỉnh mango cho người dùng (chỉ chủ bot)")
     @app_commands.describe(
         amount="Số lượng mango cần chỉnh (số nguyên dương)",
         user="Chọn người dùng",
     )
-    @app_commands.checks.has_permissions(administrator=True)
     async def managemango(
         self,
         interaction: discord.Interaction,
         amount: app_commands.Range[int, 0],
         user: discord.Member | None = None,
     ):
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message(
+                "Bạn không có quyền dùng lệnh này.", ephemeral=True
+            )
+            return
+
         user = user or interaction.user
         farm_store.set_mango(
             interaction.guild.id,
@@ -106,13 +112,6 @@ class GamesCog(commands.Cog):
         )
 
         await interaction.response.send_message(f"✅ Đã chỉnh Mango của {user.mention} thành **{amount}** 🥭", ephemeral=True)
-
-    @managemango.error
-    async def clear_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        if isinstance(error, app_commands.MissingPermissions):
-            await interaction.response.send_message("Bạn cần quyền Administrator để dùng lệnh này.", ephemeral=True)
-        else:
-            await interaction.response.send_message(f"Lỗi: {error}", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(GamesCog(bot))
