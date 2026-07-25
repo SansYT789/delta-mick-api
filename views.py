@@ -158,49 +158,110 @@ class CarSelectDropdown(discord.ui.Select):
 
 # ==================== SHOP XE ====================
 
-def build_car_shop(guild_id: int, user_id: int):
+CARS_PER_PAGE = 1  # mỗi trang hiện chi tiết 1 xe — dễ đọc trên mobile, dùng nút chuyển trang để lướt
+
+
+def _car_status_text(data: dict, car_id: str) -> str:
+    owned = data["cars"].get(car_id, {}).get("owned", False)
+    active = data.get("active_car") == car_id
+    if active:
+        return "🟢 Đang dùng"
+    if owned:
+        return "✅ Đã sở hữu"
+    return "🔒 Chưa mua"
+
+
+def build_car_shop(guild_id: int, user_id: int, page: int = 0):
     data = store.get_user_data(guild_id, user_id)
     money = data.get("money", 0)
 
-    embed = discord.Embed(title="🛒 Shop xe", color=discord.Color.gold())
-    lines = []
-    for cid in config.CAR_ORDER:
-        car = config.CARS[cid]
-        owned = data["cars"].get(cid, {}).get("owned", False)
-        tag = "✅ Đã sở hữu" if owned else f"${car['price']:,}"
-        lines.append(
-            f"**{car['name']}** — {tag}\n"
-            f"　Durability {car['durability']} | Max EF{car['max_ef']} | Cooldown {car['cooldown_min']}p"
-        )
-    embed.description = "\n\n".join(lines)
-    embed.set_footer(text=f"Bạn có ${money:,}")
+    total_pages = len(config.CAR_ORDER)
+    page = max(0, min(page, total_pages - 1))
+    car_id = config.CAR_ORDER[page]
+    car = config.CARS[car_id]
+    owned = data["cars"].get(car_id, {}).get("owned", False)
 
-    view = discord.ui.View(timeout=60)
-    for cid in config.CAR_ORDER:
-        car = config.CARS[cid]
-        owned = data["cars"].get(cid, {}).get("owned", False)
-        if not owned:
-            view.add_item(BuyCarButton(guild_id, user_id, cid, car["price"]))
+    embed = discord.Embed(
+        title=f"🛒 Shop xe — {car['name']}",
+        description=_car_status_text(data, car_id),
+        color=discord.Color.gold(),
+    )
+    embed.add_field(name="Giá", value="Miễn phí" if car["price"] == 0 else f"${car['price']:,}", inline=True)
+    embed.add_field(name="Durability", value=f"{car['durability']}", inline=True)
+    embed.add_field(name="Max EF", value=f"EF{car['max_ef']}", inline=True)
+    embed.add_field(name="Cooldown", value=f"{car['cooldown_min']} phút", inline=True)
+    embed.add_field(name="Base rate", value=f"${car['base_rate']}/phút trụ", inline=True)
+    embed.set_footer(text=f"Xe {page + 1}/{total_pages} • Bạn có ${money:,}")
+
+    view = CarShopView(guild_id, user_id, page, car_id, owned)
     return embed, view
 
 
-class BuyCarButton(discord.ui.Button):
-    def __init__(self, guild_id, user_id, car_id, price):
-        super().__init__(label=f"Mua {config.CARS[car_id]['name']} (${price:,})", style=discord.ButtonStyle.success)
+class CarShopView(discord.ui.View):
+    def __init__(self, guild_id: int, user_id: int, page: int, car_id: str, owned: bool):
+        super().__init__(timeout=90)
         self.guild_id = guild_id
         self.user_id = user_id
+        self.page = page
         self.car_id = car_id
-        self.price = price
+        self.owned = owned
 
-    async def callback(self, interaction: discord.Interaction):
+        self.add_item(CarJumpDropdown(guild_id, user_id, page))
+
+        # nút chuyển trang
+        prev_btn = discord.ui.Button(
+            label="◀️", style=discord.ButtonStyle.secondary, row=1, disabled=(page <= 0)
+        )
+        prev_btn.callback = self._make_page_callback(page - 1)
+        self.add_item(prev_btn)
+
+        next_btn = discord.ui.Button(
+            label="▶️", style=discord.ButtonStyle.secondary, row=1,
+            disabled=(page >= len(config.CAR_ORDER) - 1),
+        )
+        next_btn.callback = self._make_page_callback(page + 1)
+        self.add_item(next_btn)
+
+        # nút mua / dùng xe
+        car = config.CARS[car_id]
+        if owned:
+            data = store.get_user_data(guild_id, user_id)
+            is_active = data.get("active_car") == car_id
+            use_btn = discord.ui.Button(
+                label="🟢 Đang dùng" if is_active else "Dùng xe này",
+                style=discord.ButtonStyle.primary,
+                disabled=is_active,
+                row=1,
+            )
+            use_btn.callback = self._use_car_callback
+            self.add_item(use_btn)
+        else:
+            buy_btn = discord.ui.Button(
+                label=f"Mua (${car['price']:,})", style=discord.ButtonStyle.success, row=1,
+            )
+            buy_btn.callback = self._buy_car_callback
+            self.add_item(buy_btn)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
-            return
+            return False
+        return True
+
+    def _make_page_callback(self, target_page: int):
+        async def _cb(interaction: discord.Interaction):
+            embed, view = build_car_shop(self.guild_id, self.user_id, page=target_page)
+            await interaction.response.edit_message(embed=embed, view=view)
+        return _cb
+
+    async def _buy_car_callback(self, interaction: discord.Interaction):
+        car = config.CARS[self.car_id]
+        price = car["price"]
 
         def _buy(d):
-            if d.get("money", 0) < self.price:
-                return d  # không đủ tiền, không đổi gì
-            d["money"] -= self.price
+            if d.get("money", 0) < price:
+                return d
+            d["money"] -= price
             d.setdefault("cars", {})[self.car_id] = {
                 "durability_level": 0,
                 "cooldown_level": 0,
@@ -213,7 +274,40 @@ class BuyCarButton(discord.ui.Button):
             await interaction.response.send_message("Không đủ money để mua xe này.", ephemeral=True)
             return
 
-        embed, view = build_car_shop(self.guild_id, self.user_id)
+        embed, view = build_car_shop(self.guild_id, self.user_id, page=self.page)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    async def _use_car_callback(self, interaction: discord.Interaction):
+        store.update_user_data(self.guild_id, self.user_id, {"active_car": self.car_id})
+        embed, view = build_car_shop(self.guild_id, self.user_id, page=self.page)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class CarJumpDropdown(discord.ui.Select):
+    """Dropdown để nhảy thẳng tới 1 xe bất kỳ thay vì bấm ◀️▶️ nhiều lần."""
+
+    def __init__(self, guild_id: int, user_id: int, current_page: int):
+        self.guild_id = guild_id
+        self.user_id = user_id
+        data = store.get_user_data(guild_id, user_id)
+
+        options = []
+        for i, cid in enumerate(config.CAR_ORDER):
+            car = config.CARS[cid]
+            status = _car_status_text(data, cid)
+            options.append(
+                discord.SelectOption(
+                    label=car["name"],
+                    description=status,
+                    value=str(i),
+                    default=(i == current_page),
+                )
+            )
+        super().__init__(placeholder="Chọn xe để xem chi tiết...", options=options, row=0)
+
+    async def callback(self, interaction: discord.Interaction):
+        target_page = int(self.values[0])
+        embed, view = build_car_shop(self.guild_id, self.user_id, page=target_page)
         await interaction.response.edit_message(embed=embed, view=view)
 
 
