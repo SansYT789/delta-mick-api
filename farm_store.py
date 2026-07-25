@@ -123,8 +123,7 @@ def transaction_farm_data(guild_id: int, user_id: int, fn):
 
     return ref.transaction(_txn)
 
-
-# ---------------- MANGO (dùng chung với tornado) ----------------
+# ---------------- MANGO ----------------
 
 def get_mango(guild_id: int, user_id: int) -> int:
     val = _mango_ref(guild_id, user_id).get()
@@ -144,6 +143,10 @@ def transaction_mango(guild_id: int, user_id: int, delta: int) -> int:
 
     return ref.transaction(_txn)
 
+def set_mango(guild_id: int, user_id: int, amount: int):
+    amount = max(0, int(amount))
+    _mango_ref(guild_id, user_id).set(amount)
+    return amount
 
 # ---------------- INVENTORY ----------------
 
