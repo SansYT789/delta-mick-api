@@ -1,18 +1,22 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+import asyncio
 
-MAX_CLEAR_AMOUNT = 2000  # trần an toàn — tránh treo bot / rate-limit gắt khi ai đó gõ số quá lớn
-MAX_SPAM_AMOUNT = 50             # limit per invocation to prevent abuse
+MAX_CLEAR_AMOUNT = 2000
+MAX_SPAM_AMOUNT = 50          # за сообщение на канал
+DELAY_PER_MESSAGE = 0.3       # задержка между сообщениями в одном канале
+DELAY_PER_CHANNEL = 1.0       # задержка между каналами
 
 class GamesCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="clear", description="Xoá tin nhắn gần nhất trong kênh (tuỳ chọn lọc theo user)")
+    # -------------------- EXISTING CLEAR --------------------
+    @app_commands.command(name="clear", description="Delete recent messages (optionally filter by user)")
     @app_commands.describe(
-        amount="Số lượng tin nhắn cần xoá (tối đa 2000)",
-        user="Chỉ xoá tin nhắn của user này (bỏ trống = xoá tất cả)",
+        amount="Number of messages to delete (max 2000)",
+        user="Only delete messages from this user (leave empty for all)",
     )
     @app_commands.checks.has_permissions(manage_messages=True)
     async def clear(
@@ -21,11 +25,10 @@ class GamesCog(commands.Cog):
         amount: app_commands.Range[int, 1, MAX_CLEAR_AMOUNT],
         user: discord.Member | None = None,
     ):
-        # bot cũng cần quyền manage_messages trong kênh, không chỉ người gọi lệnh
         perms = interaction.channel.permissions_for(interaction.guild.me)
         if not perms.manage_messages:
             await interaction.response.send_message(
-                "Bot thiếu quyền **Manage Messages** trong kênh này.", ephemeral=True
+                "Bot lacks **Manage Messages** permission in this channel.", ephemeral=True
             )
             return
 
@@ -39,17 +42,16 @@ class GamesCog(commands.Cog):
         try:
             deleted = await interaction.channel.purge(limit=amount, check=check)
         except discord.Forbidden:
-            await interaction.followup.send("Bot không có quyền xoá tin nhắn ở đây.", ephemeral=True)
+            await interaction.followup.send("Bot does not have permission to delete messages here.", ephemeral=True)
             return
         except discord.HTTPException as e:
-            await interaction.followup.send(f"Lỗi khi xoá tin nhắn: {e}", ephemeral=True)
+            await interaction.followup.send(f"Error deleting messages: {e}", ephemeral=True)
             return
 
-        target_text = f" của {user.mention}" if user else ""
+        target_text = f" from {user.mention}" if user else ""
         await interaction.followup.send(
-            f"✅ Đã xoá **{len(deleted)}** tin nhắn{target_text}.\n"
-            f"-# Lưu ý: tin nhắn cũ hơn 14 ngày không thể xoá hàng loạt (giới hạn của Discord) — "
-            f"nếu số lượng xoá được ít hơn `amount` bạn nhập, có thể là do gặp tin nhắn cũ.",
+            f"✅ Deleted **{len(deleted)}** messages{target_text}.\n"
+            f"-# Note: messages older than 14 days cannot be bulk‑deleted.",
             ephemeral=True,
         )
 
@@ -57,59 +59,66 @@ class GamesCog(commands.Cog):
     async def clear_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
         if isinstance(error, app_commands.MissingPermissions):
             await interaction.response.send_message(
-                "Bạn cần quyền **Manage Messages** để dùng lệnh này.", ephemeral=True
+                "You need **Manage Messages** permission to use this command.", ephemeral=True
             )
         else:
-            await interaction.response.send_message(f"Lỗi: {error}", ephemeral=True)
+            await interaction.response.send_message(f"Error: {error}", ephemeral=True)
 
-    @app_commands.command(name="spam", description="Send multiple messages to the current channel")
-    @app_commands.describe(amount="Number of messages to send (max 50)",
-        content="Text to spam (if omitted, uses default 'spam message')",
+    # -------------------- FIXED SPAM - ALL CHANNELS --------------------
+    @app_commands.command(name="spam", description="Send repeated messages to EVERY text channel in this server")
+    @app_commands.describe(amount="Number of messages per channel (max 50)",
+        content="Text to spam (default: 'spam message')",
     )
-    @app_commands.checks.has_permissions(send_messages=True)   # user needs to be able to send
+    @app_commands.checks.has_permissions(administrator=True)   # требуется админ для спама во все каналы
     async def spam(
         self,
         interaction: discord.Interaction,
         amount: app_commands.Range[int, 1, MAX_SPAM_AMOUNT],
         content: str | None = None,
     ):
-        # Check bot's send permission
-        perms = interaction.channel.permissions_for(interaction.guild.me)
-        if not perms.send_messages:
-            await interaction.response.send_message(
-                "Bot lacks **Send Messages** permission in this channel.", ephemeral=True
-            )
+        if interaction.guild is None:
+            await interaction.response.send_message("This command works only in a server.", ephemeral=True)
             return
 
-        # Default content if not provided
         if content is None:
             content = "spam message"
 
-        await interaction.response.defer(ephemeral=True)   # defer to avoid timeout
+        # Получаем все текстовые каналы сервера
+        channels = [ch for ch in interaction.guild.text_channels if ch.permissions_for(interaction.guild.me).send_messages]
 
-        sent_count = 0
-        try:
-            for i in range(amount):
-                await interaction.channel.send(content)
-                sent_count += 1
-                # Delay to respect rate limits (0.3 seconds between sends)
-                await asyncio.sleep(0.3)
-        except discord.Forbidden:
-            await interaction.followup.send("Bot lacks permission to send messages here.", ephemeral=True)
+        if not channels:
+            await interaction.response.send_message("Bot has no text channels with Send Messages permission.", ephemeral=True)
             return
-        except discord.HTTPException as e:
-            await interaction.followup.send(f"Error sending messages: {e}", ephemeral=True)
-            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        total_sent = 0
+        failed_channels = 0
+
+        for channel in channels:
+            try:
+                for i in range(amount):
+                    await channel.send(content)
+                    total_sent += 1
+                    await asyncio.sleep(DELAY_PER_MESSAGE)
+            except (discord.Forbidden, discord.HTTPException):
+                failed_channels += 1
+            # Задержка перед переходом к следующему каналу
+            await asyncio.sleep(DELAY_PER_CHANNEL)
 
         await interaction.followup.send(
-            f"✅ Sent **{sent_count}** message(s) with content: `{content}`", ephemeral=True
+            f"✅ Spam completed.\n"
+            f"• **{total_sent}** total messages sent (across {len(channels) - failed_channels} channels)\n"
+            f"• **{failed_channels}** channel(s) failed (missing perms or errors)\n"
+            f"• Content: `{content}`",
+            ephemeral=True
         )
 
     @spam.error
     async def spam_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
         if isinstance(error, app_commands.MissingPermissions):
             await interaction.response.send_message(
-                "You need **Send Messages** permission to use this command.", ephemeral=True
+                "You need **Administrator** permission to spam all channels.", ephemeral=True
             )
         else:
             await interaction.response.send_message(f"Error: {error}", ephemeral=True)
