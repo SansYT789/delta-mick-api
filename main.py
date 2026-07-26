@@ -37,6 +37,8 @@ async def on_ready():
 async def main():
     async with bot:
         await bot.load_extension("games")
+        await bot.load_extension("utility_commands")
+        await bot.load_extension("economy_commands")
         await bot.start(os.environ["TOKEN"])
 
 if __name__ == "__main__":
