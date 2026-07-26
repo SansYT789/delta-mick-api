@@ -1,32 +1,35 @@
 """
-Schema:
 users/{user_id}/farm/
-    crop_type: "mango" | "lemon"          # cây đang active
-    unlocked_crops: {"mango": True, "lemon": False}
-    seed_inventory: {"mango": 2, "lemon": 0}   # số hạt giống đã mua, chưa trồng
-    plot: {
-        planted: bool,
-        seed_type: str | None,
-        progress: float,
-        last_water_at: iso | None,
-        active_sprinkler_tier: str | None,     # sprinkler ĐANG kích hoạt trên đất (None = tắt)
-        active_sprinkler_until: iso | None,
+    unlocked_crops: {"mango": True, "lemon": False, "orange": False, "apple": False}
+    seed_inventory: {"mango": 2, "lemon": 0, ...}   # số hạt giống đã mua, chưa trồng
+    unlocked_plots: {"1": True, "2": False, ...}    # ô nào đã mở khoá bằng tiền
+    plots: {
+        "1": {
+            "slots": [
+                {
+                    "planted": bool,
+                    "seed_type": str | None,
+                    "progress": float,
+                    "last_water_at": iso | None,
+                    "last_passive_tick_at": iso | None,   # mốc lazy-calc cho auto-grow thụ động
+                    "active_sprinkler_tier": str | None,
+                    "active_sprinkler_until": iso | None,
+                },
+                ... (SLOTS_PER_PLOT phần tử, mỗi slot 1 cây độc lập, có thể khác loại nhau)
+            ]
+        },
+        "2": {...}, ..., "6": {...}
     }
-    sprinkler_inventory: {"basic": 2, "rare": 1}   # sprinkler đã mua, chưa dùng hết / đang chờ kích hoạt
+    sprinkler_inventory: {"basic": 2, "rare": 1}
     watering_can: "basic" | "advanced"
-    upgrades: {
-        "yield_level": int,
-        "water_speed_level": int,
-    }
-    tools: {"scanner": bool, "mutation_plucker": bool}
+    upgrades: {"yield_level": int, "water_speed_level": int}
+    gear: {"scanner": bool, "mutation_plucker": bool, "wrench": bool, "net": bool, "lightning_rod": bool}
     farmer: {
-        "hired": bool,
-        "hired_until": iso | None,     # hết hạn thuê (None nếu permanent hoặc chưa thuê)
-        "permanent": bool,             # đã nâng cấp vĩnh viễn (100k mango) hay chưa
-        "level": int,
-        "last_processed_at": iso | None,   # mốc lazy-calc
+        "hired": bool, "hired_until": iso | None, "permanent": bool, "level": int,
+        "last_processed_at": iso | None,
+        "auto_water": bool,   # nông dân bây giờ KHÔNG tự mua hạt, chỉ tự tưới (mới)
     }
-    inventory: { "mango_ripe|giant,flooded": count, ... }  # key format: "produce|mut1,mut2" (sorted mutations)
+    inventory: { "mango_ripe|giant,flooded": count, ... }
 
 guilds/{guild_id}/weather/
     current: str
@@ -41,25 +44,77 @@ from firebase_admin import db
 
 import farm_config
 
-DEFAULT_FARM_DATA = {
-    "crop_type": "mango",
-    "unlocked_crops": {"mango": True, "lemon": False, "orange": False, "apple": False},
-    "seed_inventory": {"mango": 0, "lemon": 0, "orange": 0, "apple": 0},
-    "plot": {
+def _empty_slot() -> dict:
+    return {
         "planted": False,
         "seed_type": None,
         "progress": 0.0,
         "last_water_at": None,
+        "last_passive_tick_at": None,
         "active_sprinkler_tier": None,
         "active_sprinkler_until": None,
-    },
+    }
+
+def _empty_plot() -> dict:
+    return {"slots": [_empty_slot() for _ in range(farm_config.SLOTS_PER_PLOT)]}
+
+def _default_plots() -> dict:
+    return {str(pid): _empty_plot() for pid in farm_config.PLOT_ORDER}
+
+def _default_unlocked_plots() -> dict:
+    return {str(pid): (pid == 1) for pid in farm_config.PLOT_ORDER}
+
+DEFAULT_FARM_DATA = {
+    "unlocked_crops": {"mango": True, "lemon": False, "orange": False, "apple": False},
+    "seed_inventory": {"mango": 0, "lemon": 0, "orange": 0, "apple": 0},
+    "unlocked_plots": _default_unlocked_plots(),
+    "plots": _default_plots(),
     "sprinkler_inventory": {},
     "watering_can": "basic",
     "upgrades": {"yield_level": 0, "water_speed_level": 0},
-    "tools": {"scanner": False, "mutation_plucker": False},
-    "farmer": {"hired": False, "hired_until": None, "permanent": False, "level": 0, "last_processed_at": None},
+    "gear": {
+        "scanner": False, "mutation_plucker": False,
+        "wrench": False, "net": False, "lightning_rod": False,
+    },
+    "farmer": {
+        "hired": False, "hired_until": None, "permanent": False, "level": 0,
+        "last_processed_at": None, "auto_water": False,
+    },
     "inventory": {},
 }
+
+def _migrate_v1_to_v2(data: dict) -> dict:
+    if "plot" in data and "plots" not in data:
+        old_plot = data.pop("plot")
+        old_crop_type = data.pop("crop_type", "mango")
+
+        plots = _default_plots()
+        slot0 = _empty_slot()
+        slot0["planted"] = old_plot.get("planted", False)
+        slot0["seed_type"] = old_plot.get("seed_type") or (old_crop_type if old_plot.get("planted") else None)
+        slot0["progress"] = old_plot.get("progress", 0.0)
+        slot0["last_water_at"] = old_plot.get("last_water_at")
+        slot0["last_passive_tick_at"] = old_plot.get("last_water_at") or now_iso()
+        slot0["active_sprinkler_tier"] = old_plot.get("active_sprinkler_tier")
+        slot0["active_sprinkler_until"] = old_plot.get("active_sprinkler_until")
+        plots["1"]["slots"][0] = slot0
+        data["plots"] = plots
+        data["unlocked_plots"] = _default_unlocked_plots()
+
+    if "tools" in data and "gear" not in data:
+        old_tools = data.pop("tools")
+        data["gear"] = {
+            "scanner": old_tools.get("scanner", False),
+            "mutation_plucker": old_tools.get("mutation_plucker", False),
+            "wrench": False,
+            "net": False,
+            "lightning_rod": False,
+        }
+
+    if "farmer" in data and "auto_water" not in data["farmer"]:
+        data["farmer"]["auto_water"] = False
+
+    return data
 
 def _farm_ref(guild_id: int, user_id: int):
     return db.reference(f"users/{user_id}/farm")
@@ -95,7 +150,9 @@ def get_farm_data(guild_id: int, user_id: int) -> dict:
     if data is None:
         ref.set(DEFAULT_FARM_DATA)
         return dict(DEFAULT_FARM_DATA)
-    return _deep_merge_defaults(data, DEFAULT_FARM_DATA)
+    data = _migrate_v1_to_v2(dict(data))
+    merged = _deep_merge_defaults(data, DEFAULT_FARM_DATA)
+    return merged
 
 def update_farm_data(guild_id: int, user_id: int, patch: dict):
     _farm_ref(guild_id, user_id).update(patch)
@@ -104,6 +161,7 @@ def transaction_farm_data(guild_id: int, user_id: int, fn):
     ref = _farm_ref(guild_id, user_id)
 
     def _txn(current):
+        current = _migrate_v1_to_v2(dict(current)) if current else {}
         merged = _deep_merge_defaults(current, DEFAULT_FARM_DATA)
         return fn(merged)
 
@@ -115,6 +173,10 @@ def get_mango(guild_id: int, user_id: int) -> int:
     return val or 0
 
 def transaction_mango(guild_id: int, user_id: int, delta: int):
+    """
+    Trả về SỐ DƯ MỚI nếu giao dịch thành công.
+    Trả về None nếu không đủ mango (delta âm khiến số dư < 0) — không có gì thay đổi.
+    """
     ref = _mango_ref(guild_id, user_id)
     failed = {"insufficient": False}
 
@@ -132,6 +194,12 @@ def transaction_mango(guild_id: int, user_id: int, delta: int):
     return result
 
 def spend_mango_and_apply(guild_id: int, user_id: int, cost: int, apply_fn) -> tuple[bool, str]:
+    """
+    Trừ `cost` mango rồi áp dụng `apply_fn` lên farm_data, có COMPENSATING ROLLBACK:
+    nếu apply_fn raise exception sau khi tiền đã bị trừ, tự động hoàn lại mango ngay.
+    Loại bỏ hoàn toàn trường hợp "mất tiền vĩnh viễn mà không nhận item" của code cũ,
+    vốn tách 2 lời gọi transaction_mango + transaction_farm_data độc lập không rollback.
+    """
     if cost < 0:
         raise ValueError("cost phải >= 0")
 

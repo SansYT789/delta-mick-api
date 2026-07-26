@@ -111,6 +111,9 @@ def render_plant_stage(colors: dict, progress_ratio: float, ready: bool,
 def render_farm_image(crop_type: str, planted: bool, progress: float, needed: float,
                        stage_preview: str | None = None, sprinkler_active: bool = False,
                        soil_image_path: str = SOIL_BASE_PATH) -> bytes:
+    """
+    [Giữ lại cho tương thích] Ghép 1 cây đơn lẻ lên ảnh nền đất — dùng khi chỉ có 1 ô/1 slot.
+    """
     base = Image.open(soil_image_path).convert("RGBA")
 
     if planted:
@@ -125,14 +128,105 @@ def render_farm_image(crop_type: str, planted: bool, progress: float, needed: fl
         base.alpha_composite(plant_img, dest=(paste_x, paste_y))
 
         if sprinkler_active:
-            drop_layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
-            dd = ImageDraw.Draw(drop_layer)
-            rnd = random.Random(1)
-            for _ in range(14):
-                dx = rnd.randint(anchor_x - 70, anchor_x + 70)
-                dy = rnd.randint(anchor_y - 120, anchor_y - 10)
-                dd.line([(dx, dy), (dx - 2, dy + 8)], fill=(120, 180, 230, 180), width=2)
-            base.alpha_composite(drop_layer)
+            _draw_rain_drops(base, anchor_x, anchor_y)
+
+    buf = io.BytesIO()
+    base.convert("RGB").save(buf, format="PNG")
+    buf.seek(0)
+    return buf.read()
+
+def _draw_rain_drops(base: Image.Image, anchor_x: int, anchor_y: int, seed: int = 1):
+    drop_layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    dd = ImageDraw.Draw(drop_layer)
+    rnd = random.Random(seed)
+    for _ in range(10):
+        dx = rnd.randint(anchor_x - 40, anchor_x + 40)
+        dy = rnd.randint(anchor_y - 90, anchor_y - 10)
+        dd.line([(dx, dy), (dx - 2, dy + 6)], fill=(120, 180, 230, 180), width=2)
+    base.alpha_composite(drop_layer)
+
+def render_multi_plot_image(plots_render_data: list[dict], soil_image_path: str = SOIL_BASE_PATH) -> bytes:
+    """
+    Vẽ nhiều cây nhỏ trên cùng 1 ảnh nền đất, sắp theo lưới ô x slot.
+
+    plots_render_data: list các dict, mỗi dict ứng với 1 Ô ĐÃ MỞ KHOÁ:
+        {
+            "plot_id": int,
+            "unlocked": True,
+            "slots": [
+                {"planted": bool, "crop_type": str|None, "progress": float, "needed": float,
+                 "stage_preview": str|None, "sprinkler_active": bool}
+                ... (đúng SLOTS_PER_PLOT phần tử, phần tử planted=False nếu ô trống)
+            ]
+        }
+    Chỉ vẽ các ô có unlocked=True. Ô khoá không xuất hiện trên ảnh (tránh rối mắt).
+    Layout: mỗi ô chiếm 1 "cụm" gồm 3 cây nhỏ nằm ngang, các cụm xếp thành lưới theo số ô đã mở khoá.
+    """
+    base = Image.open(soil_image_path).convert("RGBA")
+    W, H = base.size
+
+    unlocked_plots = [p for p in plots_render_data if p.get("unlocked")]
+    if not unlocked_plots:
+        buf = io.BytesIO()
+        base.convert("RGB").save(buf, format="PNG")
+        buf.seek(0)
+        return buf.read()
+
+    n_plots = len(unlocked_plots)
+    # lưới cụm ô: tối đa 3 cụm/hàng để không quá chật với 6 ô
+    cols = min(3, n_plots)
+    rows = (n_plots + cols - 1) // cols
+
+    margin_x, margin_top, margin_bottom = 25, 15, 8
+    usable_w = W - 2 * margin_x
+    usable_h = H - margin_top - margin_bottom - 82
+
+    cell_w = usable_w / cols
+    cell_h = usable_h / rows if rows > 0 else usable_h
+
+    plant_small_size = (72, 82)  # kích thước mỗi cây thu nhỏ khi vẽ nhiều cây
+
+    for idx, plot_data in enumerate(unlocked_plots):
+        col = idx % cols
+        row = idx // cols
+        cluster_cx = margin_x + cell_w * (col + 0.5)
+        cluster_base_y = margin_top + 82 + cell_h * (row + 1) - 12
+
+        slots = plot_data["slots"]
+        n_slots = len(slots)
+        slot_spacing = min(plant_small_size[0] + 6, cell_w / max(1, n_slots))
+        start_x = cluster_cx - (slot_spacing * (n_slots - 1)) / 2
+
+        for si, slot in enumerate(slots):
+            sx = start_x + slot_spacing * si
+            sy = cluster_base_y
+
+            if not slot.get("planted"):
+                # ô đất trống: chấm nâu nhỏ đánh dấu vị trí
+                d = ImageDraw.Draw(base)
+                d.ellipse([sx - 4, sy - 4, sx + 4, sy + 4], fill=(90, 60, 35))
+                continue
+
+            crop_type = slot.get("crop_type") or "mango"
+            colors = CROP_COLORS.get(crop_type, CROP_COLORS["mango"])
+            needed = slot.get("needed") or 1.0
+            ratio = (slot.get("progress", 0.0) / needed) if needed else 0.0
+            ready = slot.get("progress", 0.0) >= needed
+
+            plant_img = render_plant_stage(
+                colors, ratio, ready,
+                stage_key=slot.get("stage_preview"),
+                seed=hash((plot_data["plot_id"], si, crop_type)) & 0xFFFF,
+            )
+            # scale xuống kích thước nhỏ cho nhiều cây cùng khung hình
+            plant_img = plant_img.resize(plant_small_size, Image.LANCZOS)
+
+            paste_x = int(sx - plant_img.width / 2)
+            paste_y = int(sy - plant_img.height + 8)
+            base.alpha_composite(plant_img, dest=(paste_x, paste_y))
+
+            if slot.get("sprinkler_active"):
+                _draw_rain_drops(base, int(sx), int(sy), seed=idx * 10 + si)
 
     buf = io.BytesIO()
     base.convert("RGB").save(buf, format="PNG")

@@ -1,6 +1,12 @@
 # ---------------- CÂY TRỒNG ----------------
 # Cây (loại) là NÂNG CẤP — unlock 1 lần để mở khoá loại cây, sau đó vẫn phải MUA HẠT GIỐNG
 # (seed_cost) mỗi lần muốn trồng, giá hạt tăng theo cây cao cấp hơn.
+#
+# passive_progress_per_min: tốc độ tự tăng progress mỗi phút KHÔNG CẦN TƯỚI (auto-grow theo thời gian thực,
+# tính cả lúc offline). Tưới nước vẫn có tác dụng CỘNG THÊM progress tức thời (tuỳ chọn, không bắt buộc).
+# Mốc thời gian trồng đầy đủ (0 -> grow_progress_needed) nếu KHÔNG tưới gì: mango 2h / lemon 4h / orange 8h / apple 16h.
+#
+# sells_mango_plus: cây cao cấp (unlock sau) có thể bán ra mango+ ngoài mango thường (tính năng tương lai).
 CROPS = {
     "mango": {
         "name": "Xoài",
@@ -8,7 +14,9 @@ CROPS = {
         "grow_progress_needed": 8,
         "seed_cost": 4,          # giá
         "next_unlock": "lemon",
-        "base_yield": 2,
+        "base_yield": 3,
+        "passive_progress_per_min": 8 / (2 * 60),      # đầy trong 2h
+        "sells_mango_plus": False,
     },
     "lemon": {
         "name": "Chanh",
@@ -17,6 +25,8 @@ CROPS = {
         "seed_cost": 8,          # giá
         "next_unlock": "orange",
         "base_yield": 4,
+        "passive_progress_per_min": 10 / (4 * 60),     # đầy trong 4h
+        "sells_mango_plus": False,
     },
     "orange": {
         "name": "Cam",
@@ -25,18 +35,42 @@ CROPS = {
         "seed_cost": 15,          # giá
         "next_unlock": "apple",
         "base_yield": 5,
+        "passive_progress_per_min": 15 / (8 * 60),     # đầy trong 8h
+        "sells_mango_plus": True,
     },
     "apple": {
         "name": "Táo",
         "unlock_cost": 700,     # nâng cấp mở khoá
         "grow_progress_needed": 30,
         "seed_cost": 28,          # giá
-        "next_unlock": None,
+        "next_unlock": "grape",
         "base_yield": 6,
+        "passive_progress_per_min": 30 / (16 * 60),    # đầy trong 16h
+        "sells_mango_plus": True,
+    },
+    "grape": {
+        "name": "Nho",
+        "unlock_cost": 1800,     # nâng cấp mở khoá
+        "grow_progress_needed": 60,
+        "seed_cost": 45,          # giá
+        "next_unlock": "watermelon",
+        "base_yield": 5,
+        "passive_progress_per_min": 60 / (24 * 60),    # đầy trong 16h
+        "sells_mango_plus": True,
+    },
+    "watermelon": {
+        "name": "Dưa Hấu",
+        "unlock_cost": 4000,     # nâng cấp mở khoá
+        "grow_progress_needed": 100,
+        "seed_cost": 70,          # giá
+        "next_unlock": None,
+        "base_yield": 1,
+        "passive_progress_per_min": 100 / (36 * 60),    # đầy trong 16h
+        "sells_mango_plus": True,
     },
 }
 
-CROP_ORDER = ["mango", "lemon", "orange", "apple"]
+CROP_ORDER = ["mango", "lemon", "orange", "apple","grape","watermelon"]
 
 # ---------------- SẢN PHẨM & GIÁ BÁN ----------------
 # key: "loại_trái" -> giá bán base (chưa nhân mutation)
@@ -56,6 +90,14 @@ PRODUCE_PRICES = {
     "apple_green": 14,
     "apple_ripe": 28,
     "apple_rotten": 7,
+    
+    "grape_green": 18,
+    "grape_ripe": 36,
+    "grape_rotten": 9,
+
+    "watermelon_small": 40,
+    "watermelon_ripe": 80,
+    "watermelon_cracked": 20,
 }
 
 PRODUCE_STAGES = {
@@ -74,6 +116,14 @@ PRODUCE_STAGES = {
     "apple": {
         "stages": ["apple_green", "apple_ripe", "apple_rotten"],
         "weights": [20, 65, 15],
+    },
+    "grape": {
+        "stages": ["grape_green", "grape_ripe", "grape_rotten"],
+        "weights": [25, 60, 15],
+    },
+    "watermelon": {
+        "stages": ["watermelon_small", "watermelon_ripe", "watermelon_cracked"],
+        "weights": [20, 70, 10],
     },
 }
 
@@ -137,10 +187,6 @@ WATER_SPEED_UPGRADE = {
     "base_cost": 400,
     "cost_growth": 1.3,
 }
-
-# ---------------- Giá dụng cụ ----------------
-TOOL_PRICE_SCANNER = 200     # kính lúp
-TOOL_MUTATION_PLUCKER = 800  # đồ gắp
 
 # ---------------- SPRINKLER ----------------
 # duration_min: hiệu lực kéo dài bao lâu sau khi đặt
@@ -281,5 +327,56 @@ WEATHER_MUTATION_EFFECT = {
     "nuclear_rain": {
         "radioactive": 0.15,
         "giant": 0.20,
+    },
+}
+
+# ---------------- Ô TRỒNG (PLOTS) ----------------
+# Ô 1 miễn phí (mặc định, sẵn có). Ô 2-6 mở khoá tuần tự bằng mango (2,3) hoặc mango+ (4,5,6).
+# farmer_level_required: cấp nông dân tối thiểu để nông dân TỰ ĐỘNG làm việc tại ô này
+# (ngoài điều kiện ô phải được mở khoá bằng tiền trước — cả 2 điều kiện đều bắt buộc).
+# slots_per_plot: mỗi ô trồng được tối đa N loại cây cùng lúc, mỗi slot tiến trình độc lập.
+PLOTS = {
+    1: {"unlock_cost": 0, "currency": "mango", "farmer_level_required": 0},
+    2: {"unlock_cost": 300, "currency": "mango", "farmer_level_required": 2},
+    3: {"unlock_cost": 900, "currency": "mango", "farmer_level_required": 4},
+    4: {"unlock_cost": 150, "currency": "mango_plus", "farmer_level_required": 6},
+    5: {"unlock_cost": 400, "currency": "mango_plus", "farmer_level_required": 8},
+    6: {"unlock_cost": 900, "currency": "mango_plus", "farmer_level_required": 10},
+}
+PLOT_ORDER = [1, 2, 3, 4, 5, 6]
+SLOTS_PER_PLOT = 3
+
+# ---------------- GEAR (dụng cụ) ----------------
+GEAR = {
+    "scanner": {
+        "name": "Kính lúp",
+        "price": 200,
+        "currency": "mango",
+        "desc": "Xem giá thị trường chính xác của bất kỳ trái nào trong kho.",
+    },
+    "mutation_plucker": {
+        "name": "Đồ gắp",
+        "price": 800,
+        "currency": "mango",
+        "desc": "Gỡ bỏ 1 đột biến cụ thể khỏi trái (đột biến bị gắp biến mất vĩnh viễn).",
+    },
+    "wrench": {
+        "name": "Cờ lê",
+        "price": 350,
+        "currency": "mango",
+        "desc": "Hiện nút Shop ngay trong /farm, không cần gõ /shop riêng.",
+    },
+    "net": {
+        "name": "Vợt",
+        "price": 1000,
+        "currency": "mango",
+        "desc": "Thu hoạch toàn bộ trái đã sẵn sàng ở MỌI ô và MỌI cây chỉ với 1 lần bấm.",
+    },
+    "lightning_rod": {
+        "name": "Cột thu lôi",
+        "price": 1500,
+        "currency": "mango",
+        "desc": "Tăng thêm cơ hội ra đột biến Nhiễm Điện khi trời sấm sét, áp dụng toàn bộ cây đang trồng.",
+        "electrified_bonus_chance": 0.15,
     },
 }

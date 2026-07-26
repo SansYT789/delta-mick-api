@@ -123,3 +123,39 @@ def simulate_farmer_ticks(
     if cycle_sec <= 0 or elapsed_sec <= 0:
         return 0
     return int(elapsed_sec // cycle_sec)
+
+# ---------------- MULTI-PLOT: PASSIVE GROWTH ----------------
+def compute_passive_progress_gain(crop_type: str, last_tick_at: datetime.datetime, now: datetime.datetime) -> float:
+    """
+    Tính progress tự tăng thụ động (KHÔNG cần tưới) từ last_tick_at đến now,
+    dựa trên passive_progress_per_min của crop_type. Luôn >= 0.
+    """
+    if now <= last_tick_at:
+        return 0.0
+    elapsed_min = (now - last_tick_at).total_seconds() / 60
+    rate = farm_config.CROPS[crop_type]["passive_progress_per_min"]
+    return elapsed_min * rate
+
+def plot_unlock_cost(plot_id: int) -> dict:
+    """Trả về {'cost': int, 'currency': 'mango'|'mango_plus'} cho ô đất."""
+    cfg = farm_config.PLOTS[plot_id]
+    return {"cost": cfg["unlock_cost"], "currency": cfg["currency"]}
+
+def farmer_can_work_plot(plot_id: int, farmer_level: int, plot_unlocked: bool) -> bool:
+    """
+    Farmer chỉ được tự động làm việc ở 1 ô nếu CẢ HAI điều kiện đều đúng:
+    1. Ô đã được mở khoá bằng tiền (plot_unlocked).
+    2. Level nông dân >= farmer_level_required của ô đó.
+    """
+    if not plot_unlocked:
+        return False
+    required_level = farm_config.PLOTS[plot_id]["farmer_level_required"]
+    return farmer_level >= required_level
+
+
+def next_locked_plot(unlocked_plot_ids: set[int]) -> int | None:
+    """Trả về ID ô tiếp theo cần mở khoá (mở khoá tuần tự), hoặc None nếu đã mở hết."""
+    for pid in farm_config.PLOT_ORDER:
+        if pid not in unlocked_plot_ids:
+            return pid
+    return None
