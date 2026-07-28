@@ -34,18 +34,21 @@ class GamesCog(commands.Cog):
     # Farm
     @app_commands.command(name="shop", description="Mở cửa hàng Delta Mick")
     async def shop(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         embed, view = farm_shop.build_farm_shop_embed_and_view(interaction.guild.id, interaction.user.id)
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(name="farm", description="Mở nông trại của bạn")
     async def farm(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         embed, view, file = farm_views.build_farm_embed_and_view(interaction.guild.id, interaction.user.id)
-        await interaction.response.send_message(embed=embed, view=view, file=file)
+        await interaction.followup.send(embed=embed, view=view, file=file)
 
     @app_commands.command(name="inventory", description="Xem kho nông sản và bán trái")
     async def inventory(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         embed, view = farm_shop.build_sell_view_and_embed(interaction.guild.id, interaction.user.id)
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.followup.send(embed=embed, view=view)
 
     # Mod
     @app_commands.command(name="purge", description="Xoá tin nhắn gần nhất trong kênh (tuỳ chọn lọc theo user)")
@@ -182,12 +185,13 @@ class GamesCog(commands.Cog):
     # Utility
     @app_commands.command(name="help", description="Xem danh sách lệnh của bot")
     async def help(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         pages = _build_help_pages(self.bot, interaction.user.id)
         if not pages:
-            await interaction.response.send_message("Hiện chưa có lệnh nào khả dụng.")
+            await interaction.followup.send("Hiện chưa có lệnh nào khả dụng.")
             return
         view = HelpView(pages)
-        await interaction.response.send_message(embed=pages[0], view=view)
+        await interaction.followup.send(embed=pages[0], view=view)
 
     @app_commands.command(name="mango", description="Xem số mango của bạn hoặc người khác")
     @app_commands.describe(user="Người muốn xem (bỏ trống = xem của bạn)")
@@ -378,18 +382,19 @@ class GamesCog(commands.Cog):
         target = user or interaction.user
         avatar_asset = target.display_avatar
 
-        embed = discord.Embed(title=f"🖼️ Avatar của {target.display_name}", color=discord.Color.random())
+        sizes = [128, 256, 512, 1024, 2048]
+        size_links = " | ".join(
+            f"[{size}px]({avatar_asset.with_size(size).url})" 
+            for size in sizes
+        )
+        
+        embed = discord.Embed(
+            title=f"🖼️ Avatar của {target.display_name}",
+            description=f"📥 **Tải xuống các size:**\n{size_links}",
+            color=discord.Color.random()
+        )
         embed.set_image(url=avatar_asset.url)
 
-        view = discord.ui.View(timeout=120)
-        for size in (128, 256, 512, 1024, 2048):
-            view.add_item(
-                discord.ui.Button(
-                    label=f"{size}px",
-                    style=discord.ButtonStyle.link,
-                    url=avatar_asset.with_size(size).url,
-                )
-            )
         await interaction.response.send_message(embed=embed, view=view)
 
     @app_commands.command(name="server", description="Xem thông tin máy chủ hiện tại")
@@ -654,10 +659,8 @@ def _build_lixi_embed(envelope_id: str, closed: bool = False, refund: int = 0, c
     )
     if closed:
         lines_status += "🔒 Lì xì đã đóng."
-        if refund > 0:
-            lines_status += f" Hoàn lại **{refund} {currency_label}** cho người tạo."
     else:
-        lines_status += f"Lì xì tự đóng lúc <t:{expires_unix}:t> (<t:{expires_unix}:R>)."
+        lines_status += f"Lì xì tự động đóng lúc <t:{expires_unix}:t> (<t:{expires_unix}:R>)."
 
     embed = discord.Embed(title="🧧 Lì xì!", description=lines_status, color=discord.Color.red() if not closed else discord.Color.dark_grey())
 
@@ -713,10 +716,11 @@ _COG_ORDER = ["GamesCog", "WikiCog"]
 def _build_help_pages(bot: commands.Bot, requester_id: int) -> list[discord.Embed]:
     is_owner = store.is_owner(requester_id)
     all_commands = bot.tree.get_commands()
+    locked_commands = store.get_locked_commands() if not is_owner else {}
 
     grouped: dict[str, list] = {}
     for cmd in all_commands:
-        if not is_owner and store.is_locked(cmd.name):
+        if not is_owner and locked_commands.get(cmd.name, False):
             continue
         cog_name = getattr(cmd.binding, "__class__", None)
         cog_name = cog_name.__name__ if cog_name else "Khác"

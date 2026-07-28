@@ -72,16 +72,16 @@ def _farmer_status_text(farmer: dict, now: datetime.datetime) -> str:
 
 
 # ==================== PASSIVE GROWTH + FARMER AUTO-WATER (lazy-calc) ====================
-def _process_seller(guild_id: int, user_id: int, data: dict, now: datetime.datetime) -> list[str]:
+def _process_seller(guild_id: int, user_id: int, data: dict, now: datetime.datetime) -> tuple[list[str], bool]:
     """
     Người bán nông sản: tự động bán TOÀN BỘ kho nông sản hiện có mỗi chu kỳ (catch-up theo elapsed time).
     Chỉ xử lý khoảng thời gian user KHÔNG mở /farm (lazy-calc) — nếu user tự bán tay trước khi
     tick này chạy, kho đã trống thì seller không có gì để bán, không phạt gì thêm.
-    Trả về log ngắn gọn.
+    Trả về (logs, changed) — changed=True nếu có ghi Firebase (cần đọc lại data ở tầng gọi).
     """
     seller = data.get("seller", {})
     if not farm_logic.is_npc_active(seller, now):
-        return []
+        return [], False
 
     last_processed = (
         store.parse_iso(seller["last_processed_at"])
@@ -99,11 +99,11 @@ def _process_seller(guild_id: int, user_id: int, data: dict, now: datetime.datet
         elapsed_sec = (hired_until_dt - last_processed).total_seconds()
 
     if cycle_sec <= 0 or elapsed_sec < cycle_sec:
-        return []
+        return [], False
 
     ticks = min(int(elapsed_sec // cycle_sec), 50)  # trần an toàn: tối đa 50 lần bán/lần catch-up
     if ticks <= 0:
-        return []
+        return [], False
 
     total_sold_mango = 0
     total_sold_qty = 0
@@ -126,7 +126,7 @@ def _process_seller(guild_id: int, user_id: int, data: dict, now: datetime.datet
     store.transaction_farm_data(user_id, _sell_all)
     if total_sold_qty > 0:
         store.transaction_mango(user_id, total_sold_mango)
-        return [f"💰 Người bán đã tự bán {total_sold_qty} trái trong kho, thu về {total_sold_mango} 🥭."]
+        return [f"💰 Người bán đã tự bán {total_sold_qty} trái trong kho, thu về {total_sold_mango} 🥭."], True
 
     # không có gì để bán nhưng vẫn cần cập nhật mốc tick để tránh dồn ticks vô hạn
     def _touch(d):
@@ -134,18 +134,18 @@ def _process_seller(guild_id: int, user_id: int, data: dict, now: datetime.datet
         d["seller"]["last_processed_at"] = now.isoformat()
         return d
     store.transaction_farm_data(user_id, _touch)
-    return []
+    return [], True
 
 
-def _process_collector(guild_id: int, user_id: int, data: dict, now: datetime.datetime) -> list[str]:
+def _process_collector(guild_id: int, user_id: int, data: dict, now: datetime.datetime) -> tuple[list[str], bool]:
     """
     Người thu thập hạt giống: tự động mua MIỄN PHÍ 1-N hạt giống mỗi chu kỳ (catch-up),
     chỉ mua loại hạt mà level Collector cho phép VÀ đã được unlock.
-    Trả về log ngắn gọn.
+    Trả về (logs, changed) — changed=True nếu có ghi Firebase.
     """
     collector = data.get("collector", {})
     if not farm_logic.is_npc_active(collector, now):
-        return []
+        return [], False
 
     last_processed = (
         store.parse_iso(collector["last_processed_at"])
@@ -163,11 +163,11 @@ def _process_collector(guild_id: int, user_id: int, data: dict, now: datetime.da
         elapsed_sec = (hired_until_dt - last_processed).total_seconds()
 
     if cycle_sec <= 0 or elapsed_sec < cycle_sec:
-        return []
+        return [], False
 
     ticks = min(int(elapsed_sec // cycle_sec), 50)
     if ticks <= 0:
-        return []
+        return [], False
 
     allowed_crops = farm_logic.collector_allowed_crops(collector.get("level", 0), data.get("unlocked_crops", {}))
     if not allowed_crops:
@@ -176,7 +176,7 @@ def _process_collector(guild_id: int, user_id: int, data: dict, now: datetime.da
             d["collector"]["last_processed_at"] = now.isoformat()
             return d
         store.transaction_farm_data(user_id, _touch)
-        return []
+        return [], True
 
     import random as _random
     lo, hi = stats["seeds_range"]
@@ -196,20 +196,11 @@ def _process_collector(guild_id: int, user_id: int, data: dict, now: datetime.da
 
     if gained_summary:
         parts = [f"{qty} {farm_config.CROPS[cid]['name']}" for cid, qty in gained_summary.items()]
-        return [f"🧺 Người thu thập đã mua miễn phí: {', '.join(parts)} hạt giống."]
-    return []
+        return [f"🧺 Người thu thập đã mua miễn phí: {', '.join(parts)} hạt giống."], True
+    return [], True
 
 
-def _process_offline_growth_and_farmer(guild_id: int, user_id: int) -> list[str]:
-    """
-    Mỗi lần build embed farm:
-    1. Áp dụng passive growth cho MỌI slot đã trồng ở MỌI ô đã mở khoá (kể cả offline).
-    2. Nếu có farmer active: farmer tự động TƯỚI (không tự mua hạt/trồng nữa) ở các ô
-       mà farmer đủ điều kiện làm việc (farm_logic.farmer_can_work_plot).
-    3. Nếu có seller active: tự động bán toàn bộ kho theo chu kỳ (chỉ khi user không mở /farm).
-    4. Nếu có collector active: tự động mua miễn phí hạt giống theo chu kỳ và level cho phép.
-    Trả về log ngắn gọn để hiển thị.
-    """
+def _process_offline_growth_and_farmer(guild_id: int, user_id: int) -> tuple[list[str], dict]:
     data = store.get_farm_data(user_id)
     now = datetime.datetime.utcnow()
     logs: list[str] = []
@@ -267,20 +258,26 @@ def _process_offline_growth_and_farmer(guild_id: int, user_id: int) -> list[str]
             d["plots"] = plots
             return d
         store.transaction_farm_data(user_id, _apply)
+        # Cập nhật lại data trong bộ nhớ khớp với những gì vừa ghi, tránh đọc lại Firebase.
+        data["plots"] = plots
 
-    # Seller và Collector xử lý độc lập sau khi passive growth + farmer đã áp dụng,
-    # vì chúng đọc/ghi các field khác (inventory, seed_inventory) không đụng plots.
-    logs.extend(_process_seller(guild_id, user_id, store.get_farm_data(user_id), now))
-    logs.extend(_process_collector(guild_id, user_id, store.get_farm_data(user_id), now))
+    # Seller/Collector dùng lại `data` hiện có trong bộ nhớ để CHECK điều kiện (không tốn round-trip).
+    # Nếu chúng thực sự có ghi (bán hàng / mua hạt), chỉ khi đó mới cần đọc lại 1 lần để đồng bộ.
+    seller_logs, seller_changed = _process_seller(guild_id, user_id, data, now)
+    collector_logs, collector_changed = _process_collector(guild_id, user_id, data, now)
+    logs.extend(seller_logs)
+    logs.extend(collector_logs)
 
-    return logs
+    if seller_changed or collector_changed:
+        data = store.get_farm_data(user_id)  # chỉ đọc lại khi thực sự có thay đổi cần đồng bộ
+
+    return logs, data
 
 
 # ==================== MAIN FARM EMBED ====================
 def build_farm_embed_and_view(guild_id: int, user_id: int, extra_logs: list[str] | None = None):
-    offline_logs = _process_offline_growth_and_farmer(guild_id, user_id)
+    offline_logs, data = _process_offline_growth_and_farmer(guild_id, user_id)
 
-    data = store.get_farm_data(user_id)
     mango = store.get_mango(user_id)
     weather = store.get_current_weather(guild_id)
     now = datetime.datetime.utcnow()
