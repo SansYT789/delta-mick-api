@@ -395,7 +395,7 @@ class GamesCog(commands.Cog):
         )
         embed.set_image(url=avatar_asset.url)
 
-        await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="server", description="Xem thông tin máy chủ hiện tại")
     async def server(self, interaction: discord.Interaction):
