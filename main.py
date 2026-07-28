@@ -3,9 +3,11 @@ import threading
 
 from flask import Flask
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from firebase_init import init_firebase
+import store
 
 app = Flask(__name__)
 
@@ -23,7 +25,31 @@ init_firebase()
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+class LockAwareCommandTree(app_commands.CommandTree):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.command is None:
+            return True
+        if store.is_owner(interaction.user.id):
+            return True
+        command_name = interaction.command.name
+        if store.is_locked(command_name):
+            await interaction.response.send_message(f"🔧 Lệnh `/{command_name}` đang bảo trì, vui lòng quay lại sau.")
+            return False
+        return True
+
+bot = commands.Bot(command_prefix="!", intents=intents, tree_cls=LockAwareCommandTree)
+
+@bot.check
+async def _global_prefix_lock_check(ctx: commands.Context) -> bool:
+    if ctx.command is None:
+        return True
+    if store.is_owner(ctx.author.id):
+        return True
+    command_name = ctx.command.name
+    if store.is_locked(command_name):
+        await ctx.send(f"🔧 Lệnh `{command_name}` đang bảo trì, vui lòng quay lại sau.")
+        return False
+    return True
 
 @bot.event
 async def on_ready():
@@ -37,8 +63,7 @@ async def on_ready():
 async def main():
     async with bot:
         await bot.load_extension("games")
-        await bot.load_extension("utility_commands")
-        await bot.load_extension("economy_commands")
+        await bot.load_extension("games1")
         await bot.start(os.environ["TOKEN"])
 
 if __name__ == "__main__":

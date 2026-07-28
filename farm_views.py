@@ -6,7 +6,8 @@ import discord
 import farm_config
 import farm_logic
 import farm_render
-import farm_store
+import store
+
 
 def _fmt_td(seconds: int) -> str:
     seconds = max(0, int(seconds))
@@ -18,22 +19,25 @@ def _fmt_td(seconds: int) -> str:
         return f"{m}p{s}s"
     return f"{s}s"
 
+
 def _slot_water_remaining_sec(slot: dict, water_speed_level: int) -> int:
     if not slot.get("last_water_at"):
         return 0
-    last = farm_store.parse_iso(slot["last_water_at"])
+    last = store.parse_iso(slot["last_water_at"])
     cd_min = farm_logic.water_cooldown_min(water_speed_level)
     elapsed = (datetime.datetime.utcnow() - last).total_seconds()
     remaining = cd_min * 60 - elapsed
     return max(0, int(remaining))
 
+
 def _slot_sprinkler_active(slot: dict) -> tuple[bool, str | None]:
     if not slot.get("active_sprinkler_tier") or not slot.get("active_sprinkler_until"):
         return False, None
-    until = farm_store.parse_iso(slot["active_sprinkler_until"])
+    until = store.parse_iso(slot["active_sprinkler_until"])
     if datetime.datetime.utcnow() < until:
         return True, slot["active_sprinkler_tier"]
     return False, None
+
 
 def _apply_passive_growth_to_slot(slot: dict, now: datetime.datetime) -> dict:
     """Cộng progress tự tăng thụ động từ last_passive_tick_at đến now, cập nhật mốc tick mới."""
@@ -43,13 +47,14 @@ def _apply_passive_growth_to_slot(slot: dict, now: datetime.datetime) -> dict:
 
     crop_type = slot["seed_type"]
     last_tick = slot.get("last_passive_tick_at")
-    last_tick_dt = farm_store.parse_iso(last_tick) if last_tick else now
+    last_tick_dt = store.parse_iso(last_tick) if last_tick else now
 
     needed = farm_config.CROPS[crop_type]["grow_progress_needed"]
     gain = farm_logic.compute_passive_progress_gain(crop_type, last_tick_dt, now)
     slot["progress"] = min(needed, slot.get("progress", 0.0) + gain)
     slot["last_passive_tick_at"] = now.isoformat()
     return slot
+
 
 def _farmer_status_text(farmer: dict, now: datetime.datetime) -> str:
     if not farmer.get("hired"):
@@ -59,22 +64,153 @@ def _farmer_status_text(farmer: dict, now: datetime.datetime) -> str:
     hired_until = farmer.get("hired_until")
     if not hired_until:
         return "❌ Chưa thuê"
-    until = farm_store.parse_iso(hired_until)
+    until = store.parse_iso(hired_until)
     if now >= until:
         return "❌ Đã hết hạn"
     remaining = int((until - now).total_seconds())
     return f"✅ Còn {_fmt_td(remaining)}"
 
+
 # ==================== PASSIVE GROWTH + FARMER AUTO-WATER (lazy-calc) ====================
+def _process_seller(guild_id: int, user_id: int, data: dict, now: datetime.datetime) -> list[str]:
+    """
+    Người bán nông sản: tự động bán TOÀN BỘ kho nông sản hiện có mỗi chu kỳ (catch-up theo elapsed time).
+    Chỉ xử lý khoảng thời gian user KHÔNG mở /farm (lazy-calc) — nếu user tự bán tay trước khi
+    tick này chạy, kho đã trống thì seller không có gì để bán, không phạt gì thêm.
+    Trả về log ngắn gọn.
+    """
+    seller = data.get("seller", {})
+    if not farm_logic.is_npc_active(seller, now):
+        return []
+
+    last_processed = (
+        store.parse_iso(seller["last_processed_at"])
+        if seller.get("last_processed_at") else now
+    )
+    stats = farm_logic.seller_stats(seller.get("level", 0))
+    cycle_sec = stats["cycle_min"] * 60
+
+    hired_until_dt = None
+    if not seller.get("permanent") and seller.get("hired_until"):
+        hired_until_dt = store.parse_iso(seller["hired_until"])
+
+    elapsed_sec = (now - last_processed).total_seconds()
+    if hired_until_dt is not None and hired_until_dt < now:
+        elapsed_sec = (hired_until_dt - last_processed).total_seconds()
+
+    if cycle_sec <= 0 or elapsed_sec < cycle_sec:
+        return []
+
+    ticks = min(int(elapsed_sec // cycle_sec), 50)  # trần an toàn: tối đa 50 lần bán/lần catch-up
+    if ticks <= 0:
+        return []
+
+    total_sold_mango = 0
+    total_sold_qty = 0
+
+    def _sell_all(d):
+        nonlocal total_sold_mango, total_sold_qty
+        inventory = dict(d.get("inventory", {}))
+        for key, qty in list(inventory.items()):
+            if qty <= 0:
+                continue
+            produce, mutations = store.parse_inventory_key(key)
+            value = farm_logic.compute_produce_value(produce, mutations)
+            value = int(value * stats["price_multiplier"])
+            total_sold_mango += value * qty
+            total_sold_qty += qty
+        d["inventory"] = {}
+        d["seller"]["last_processed_at"] = now.isoformat()
+        return d
+
+    store.transaction_farm_data(user_id, _sell_all)
+    if total_sold_qty > 0:
+        store.transaction_mango(user_id, total_sold_mango)
+        return [f"💰 Người bán đã tự bán {total_sold_qty} trái trong kho, thu về {total_sold_mango} 🥭."]
+
+    # không có gì để bán nhưng vẫn cần cập nhật mốc tick để tránh dồn ticks vô hạn
+    def _touch(d):
+        d.setdefault("seller", {})
+        d["seller"]["last_processed_at"] = now.isoformat()
+        return d
+    store.transaction_farm_data(user_id, _touch)
+    return []
+
+
+def _process_collector(guild_id: int, user_id: int, data: dict, now: datetime.datetime) -> list[str]:
+    """
+    Người thu thập hạt giống: tự động mua MIỄN PHÍ 1-N hạt giống mỗi chu kỳ (catch-up),
+    chỉ mua loại hạt mà level Collector cho phép VÀ đã được unlock.
+    Trả về log ngắn gọn.
+    """
+    collector = data.get("collector", {})
+    if not farm_logic.is_npc_active(collector, now):
+        return []
+
+    last_processed = (
+        store.parse_iso(collector["last_processed_at"])
+        if collector.get("last_processed_at") else now
+    )
+    stats = farm_logic.collector_stats(collector.get("level", 0))
+    cycle_sec = stats["cycle_min"] * 60
+
+    hired_until_dt = None
+    if not collector.get("permanent") and collector.get("hired_until"):
+        hired_until_dt = store.parse_iso(collector["hired_until"])
+
+    elapsed_sec = (now - last_processed).total_seconds()
+    if hired_until_dt is not None and hired_until_dt < now:
+        elapsed_sec = (hired_until_dt - last_processed).total_seconds()
+
+    if cycle_sec <= 0 or elapsed_sec < cycle_sec:
+        return []
+
+    ticks = min(int(elapsed_sec // cycle_sec), 50)
+    if ticks <= 0:
+        return []
+
+    allowed_crops = farm_logic.collector_allowed_crops(collector.get("level", 0), data.get("unlocked_crops", {}))
+    if not allowed_crops:
+        def _touch(d):
+            d.setdefault("collector", {})
+            d["collector"]["last_processed_at"] = now.isoformat()
+            return d
+        store.transaction_farm_data(user_id, _touch)
+        return []
+
+    import random as _random
+    lo, hi = stats["seeds_range"]
+    gained_summary: dict[str, int] = {}
+
+    def _collect(d):
+        d.setdefault("seed_inventory", {})
+        for _ in range(ticks):
+            crop_id = _random.choice(allowed_crops)
+            qty = _random.randint(lo, hi)
+            d["seed_inventory"][crop_id] = d["seed_inventory"].get(crop_id, 0) + qty
+            gained_summary[crop_id] = gained_summary.get(crop_id, 0) + qty
+        d["collector"]["last_processed_at"] = now.isoformat()
+        return d
+
+    store.transaction_farm_data(user_id, _collect)
+
+    if gained_summary:
+        parts = [f"{qty} {farm_config.CROPS[cid]['name']}" for cid, qty in gained_summary.items()]
+        return [f"🧺 Người thu thập đã mua miễn phí: {', '.join(parts)} hạt giống."]
+    return []
+
+
 def _process_offline_growth_and_farmer(guild_id: int, user_id: int) -> list[str]:
     """
     Mỗi lần build embed farm:
     1. Áp dụng passive growth cho MỌI slot đã trồng ở MỌI ô đã mở khoá (kể cả offline).
     2. Nếu có farmer active: farmer tự động TƯỚI (không tự mua hạt/trồng nữa) ở các ô
        mà farmer đủ điều kiện làm việc (farm_logic.farmer_can_work_plot).
+    3. Nếu có seller active: tự động bán toàn bộ kho theo chu kỳ (chỉ khi user không mở /farm).
+    4. Nếu có collector active: tự động mua miễn phí hạt giống theo chu kỳ và level cho phép.
     Trả về log ngắn gọn để hiển thị.
     """
-    data = farm_store.get_farm_data(guild_id, user_id)
+    data = store.get_farm_data(user_id)
     now = datetime.datetime.utcnow()
     logs: list[str] = []
 
@@ -130,17 +266,23 @@ def _process_offline_growth_and_farmer(guild_id: int, user_id: int) -> list[str]
         def _apply(d):
             d["plots"] = plots
             return d
-        farm_store.transaction_farm_data(guild_id, user_id, _apply)
+        store.transaction_farm_data(user_id, _apply)
+
+    # Seller và Collector xử lý độc lập sau khi passive growth + farmer đã áp dụng,
+    # vì chúng đọc/ghi các field khác (inventory, seed_inventory) không đụng plots.
+    logs.extend(_process_seller(guild_id, user_id, store.get_farm_data(user_id), now))
+    logs.extend(_process_collector(guild_id, user_id, store.get_farm_data(user_id), now))
 
     return logs
+
 
 # ==================== MAIN FARM EMBED ====================
 def build_farm_embed_and_view(guild_id: int, user_id: int, extra_logs: list[str] | None = None):
     offline_logs = _process_offline_growth_and_farmer(guild_id, user_id)
 
-    data = farm_store.get_farm_data(guild_id, user_id)
-    mango = farm_store.get_mango(guild_id, user_id)
-    weather = farm_store.get_current_weather(guild_id)
+    data = store.get_farm_data(user_id)
+    mango = store.get_mango(user_id)
+    weather = store.get_current_weather(guild_id)
     now = datetime.datetime.utcnow()
 
     unlocked_plots = data.get("unlocked_plots", {})
@@ -224,6 +366,7 @@ def build_farm_embed_and_view(guild_id: int, user_id: int, extra_logs: list[str]
     view = FarmView(guild_id, user_id, show_shop_button=has_wrench, show_net_button=has_net)
     return embed, view, file
 
+
 class FarmView(discord.ui.View):
     def __init__(self, guild_id: int, user_id: int, show_shop_button: bool = False, show_net_button: bool = False):
         super().__init__(timeout=300)
@@ -243,7 +386,7 @@ class FarmView(discord.ui.View):
 
     @discord.ui.button(label="🗂️ Quản lý ô trồng", style=discord.ButtonStyle.success)
     async def manage_plots(self, interaction: discord.Interaction, button: discord.ui.Button):
-        data = farm_store.get_farm_data(self.guild_id, self.user_id)
+        data = store.get_farm_data(self.user_id)
         unlocked_plots = data.get("unlocked_plots", {})
         available = [pid for pid in farm_config.PLOT_ORDER if unlocked_plots.get(str(pid))]
 
@@ -256,51 +399,15 @@ class FarmView(discord.ui.View):
         embed, view = build_upgrade_menu(self.guild_id, self.user_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-    @discord.ui.button(label="🚜 Thuê nông dân", style=discord.ButtonStyle.secondary)
-    async def hire_farmer(self, interaction: discord.Interaction, button: discord.ui.Button):
-        data = farm_store.get_farm_data(self.guild_id, self.user_id)
-        now = datetime.datetime.utcnow()
-        farmer = data["farmer"]
-        is_active = farm_logic.is_farmer_active(farmer, now)
-
-        if is_active:
-            embed, view = build_farmer_menu(self.guild_id, self.user_id)
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-            return
-
-        mango = farm_store.get_mango(self.guild_id, self.user_id)
-        if mango < farm_config.FARMER_HIRE_COST_MANGO:
-            await interaction.response.send_message(
-                f"Cần **{farm_config.FARMER_HIRE_COST_MANGO} mango** để thuê nông dân (bạn có {mango}).",
-                ephemeral=True,
-            )
-            return
-
-        hired_until = (now + datetime.timedelta(minutes=farm_config.FARMER_HIRE_DURATION_MIN)).isoformat()
-
-        def _hire(d):
-            d["farmer"]["hired"] = True
-            d["farmer"]["hired_until"] = hired_until
-            d["farmer"]["last_processed_at"] = now.isoformat()
-            return d
-
-        ok, msg = farm_store.spend_mango_and_apply(
-            self.guild_id, self.user_id, farm_config.FARMER_HIRE_COST_MANGO, _hire
-        )
-        if not ok:
-            await interaction.response.send_message(msg, ephemeral=True)
-            return
-
-        embed, view, file = build_farm_embed_and_view(
-            self.guild_id, self.user_id,
-            extra_logs=[f"🚜 Đã thuê nông dân ({farm_config.FARMER_HIRE_DURATION_MIN} phút)! "
-                        f"Nông dân sẽ tự tưới cây ở các ô mà cấp độ nông dân cho phép."],
-        )
-        await interaction.response.edit_message(embed=embed, view=view, attachments=[file])
+    @discord.ui.button(label="👥 Thuê nhân công", style=discord.ButtonStyle.secondary)
+    async def hire_worker_menu(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = discord.ui.View(timeout=90)
+        view.add_item(WorkerChooseDropdown(self.guild_id, self.user_id))
+        await interaction.response.send_message("Chọn loại nhân công để thuê/quản lý:", view=view, ephemeral=True)
 
     @discord.ui.button(label="💦 Kích hoạt sprinkler", style=discord.ButtonStyle.secondary)
     async def activate_sprinkler(self, interaction: discord.Interaction, button: discord.ui.Button):
-        data = farm_store.get_farm_data(self.guild_id, self.user_id)
+        data = store.get_farm_data(self.user_id)
         inventory = data.get("sprinkler_inventory", {})
         owned = [sid for sid in farm_config.SPRINKLER_ORDER if inventory.get(sid, 0) > 0]
 
@@ -315,7 +422,238 @@ class FarmView(discord.ui.View):
         view.add_item(SprinklerPlotChooseDropdown(self.guild_id, self.user_id, available, owned))
         await interaction.response.send_message("Chọn ô để kích hoạt sprinkler:", view=view, ephemeral=True)
 
+
+class WorkerChooseDropdown(discord.ui.Select):
+    def __init__(self, guild_id: int, user_id: int):
+        self.guild_id = guild_id
+        self.user_id = user_id
+        options = [
+            discord.SelectOption(label="🚜 Nông dân — tự tưới cây", value="farmer"),
+            discord.SelectOption(label="💰 Người bán — tự bán kho lúc offline", value="seller"),
+            discord.SelectOption(label="🧺 Người thu thập — tự mua hạt giống miễn phí", value="collector"),
+        ]
+        super().__init__(placeholder="Chọn loại nhân công...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
+            return
+
+        worker_kind = self.values[0]
+        embed, view = build_worker_menu(self.guild_id, self.user_id, worker_kind)
+        await interaction.response.edit_message(content=None, embed=embed, view=view)
+
+
+_WORKER_CONFIG = {
+    "farmer": {
+        "field": "farmer",
+        "name": "Nông dân",
+        "emoji": "🚜",
+        "hire_cost": lambda: farm_config.FARMER_HIRE_COST_MANGO,
+        "hire_duration_min": lambda: farm_config.FARMER_HIRE_DURATION_MIN,
+        "permanent_cost": lambda: farm_config.FARMER_PERMANENT_COST_MANGO,
+        "upgrade_kind": "farmer",
+        "max_level": lambda: farm_config.FARMER_UPGRADE["max_level"],
+        "hire_desc": "Tự động tưới cây ở các ô mà cấp độ nông dân cho phép.",
+    },
+    "seller": {
+        "field": "seller",
+        "name": "Người bán nông sản",
+        "emoji": "💰",
+        "hire_cost": lambda: farm_config.SELLER_HIRE_COST_MANGO,
+        "hire_duration_min": lambda: farm_config.SELLER_HIRE_DURATION_MIN,
+        "permanent_cost": lambda: farm_config.SELLER_HIRE_COST_MANGO * 40,
+        "upgrade_kind": "seller",
+        "max_level": lambda: farm_config.SELLER_UPGRADE["max_level"],
+        "hire_desc": "Tự động bán TOÀN BỘ kho nông sản mỗi chu kỳ — CHỈ khi bạn không mở /farm.",
+    },
+    "collector": {
+        "field": "collector",
+        "name": "Người thu thập hạt giống",
+        "emoji": "🧺",
+        "hire_cost": lambda: farm_config.COLLECTOR_HIRE_COST_MANGO,
+        "hire_duration_min": lambda: farm_config.COLLECTOR_HIRE_DURATION_MIN,
+        "permanent_cost": lambda: farm_config.COLLECTOR_HIRE_COST_MANGO * 40,
+        "upgrade_kind": "collector",
+        "max_level": lambda: farm_config.COLLECTOR_UPGRADE["max_level"],
+        "hire_desc": "Tự động mua MIỄN PHÍ hạt giống theo loại cây đã unlock và level cho phép.",
+    },
+}
+
+
+def build_worker_menu(guild_id: int, user_id: int, worker_kind: str):
+    cfg = _WORKER_CONFIG[worker_kind]
+    data = store.get_farm_data(user_id)
+    worker = data.get(cfg["field"], {})
+    now = datetime.datetime.utcnow()
+    is_active = farm_logic.is_npc_active(worker, now)
+
+    embed = discord.Embed(title=f"{cfg['emoji']} {cfg['name']}", color=discord.Color.dark_green())
+    embed.add_field(name="Trạng thái", value=_farmer_status_text(worker, now), inline=True)
+    embed.add_field(name="Cấp độ", value=f"Lv.{worker.get('level', 0)}", inline=True)
+
+    view = discord.ui.View(timeout=90)
+
+    if not is_active:
+        cost = cfg["hire_cost"]()
+        duration_min = cfg["hire_duration_min"]()
+        embed.description = f"{cfg['hire_desc']}\n\nGiá thuê: **{cost} mango** — hiệu lực **{duration_min} phút**."
+        view.add_item(_HireWorkerBtn(guild_id, user_id, worker_kind, cost, duration_min))
+        return embed, view
+
+    embed.description = cfg["hire_desc"]
+
+    if worker_kind == "farmer":
+        unlocked_plots = data.get("unlocked_plots", {})
+        level = worker.get("level", 0)
+        working_plots = [
+            pid for pid in farm_config.PLOT_ORDER
+            if farm_logic.farmer_can_work_plot(pid, level, unlocked_plots.get(str(pid), False))
+        ]
+        embed.add_field(
+            name="Đang làm việc tại",
+            value=", ".join(f"Ô {p}" for p in working_plots) if working_plots else "Chưa đủ điều kiện ở ô nào",
+            inline=False,
+        )
+        embed.add_field(name="Tự động tưới", value="✅ Bật" if worker.get("auto_water") else "❌ Tắt", inline=True)
+        view.add_item(_FarmerToggleAutoWaterBtn(guild_id, user_id, worker.get("auto_water", False)))
+    elif worker_kind == "seller":
+        stats = farm_logic.seller_stats(worker.get("level", 0))
+        embed.add_field(name="Chu kỳ bán", value=f"{stats['cycle_min']:.1f} phút/lần", inline=True)
+        embed.add_field(name="Bonus giá bán", value=f"+{(stats['price_multiplier']-1)*100:.0f}%", inline=True)
+    elif worker_kind == "collector":
+        stats = farm_logic.collector_stats(worker.get("level", 0))
+        allowed = farm_logic.collector_allowed_crops(worker.get("level", 0), data.get("unlocked_crops", {}))
+        allowed_names = ", ".join(farm_config.CROPS[c]["name"] for c in allowed) if allowed else "Chưa có loại nào"
+        embed.add_field(name="Chu kỳ mua", value=f"{stats['cycle_min']:.1f} phút/lần", inline=True)
+        embed.add_field(name="Số hạt/lần", value=f"{stats['seeds_range'][0]}-{stats['seeds_range'][1]}", inline=True)
+        embed.add_field(name="Loại hạt được mua", value=allowed_names, inline=False)
+
+    level = worker.get("level", 0)
+    max_level = cfg["max_level"]()
+    if level < max_level:
+        cost = farm_logic.upgrade_cost(cfg["upgrade_kind"], level)
+        embed.add_field(name="Nâng cấp tiếp theo", value=f"{cost} mango", inline=False)
+        view.add_item(_WorkerUpgradeBtn(guild_id, user_id, worker_kind, cost))
+
+    if not worker.get("permanent"):
+        perm_cost = cfg["permanent_cost"]()
+        embed.add_field(name="⭐ Nâng cấp vĩnh viễn", value=f"Không cần thuê lại — {perm_cost:,} mango", inline=False)
+        view.add_item(_WorkerPermanentBtn(guild_id, user_id, worker_kind, perm_cost))
+
+    return embed, view
+
+
+class _HireWorkerBtn(discord.ui.Button):
+    def __init__(self, guild_id, user_id, worker_kind, cost, duration_min):
+        cfg = _WORKER_CONFIG[worker_kind]
+        super().__init__(label=f"Thuê {cfg['name']} ({cost} mango)", style=discord.ButtonStyle.success)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.worker_kind = worker_kind
+        self.cost = cost
+        self.duration_min = duration_min
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
+            return
+
+        cfg = _WORKER_CONFIG[self.worker_kind]
+        now = datetime.datetime.utcnow()
+        hired_until = (now + datetime.timedelta(minutes=self.duration_min)).isoformat()
+
+        def _hire(d):
+            d.setdefault(cfg["field"], {})
+            d[cfg["field"]]["hired"] = True
+            d[cfg["field"]]["hired_until"] = hired_until
+            d[cfg["field"]]["last_processed_at"] = now.isoformat()
+            return d
+
+        ok, msg = store.spend_mango_and_apply(
+            self.user_id, self.cost, _hire,
+            label=f"Thuê {cfg['name']}",
+        )
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
+        embed, view = build_worker_menu(self.guild_id, self.user_id, self.worker_kind)
+        await interaction.response.edit_message(
+            content=f"✅ Đã thuê **{cfg['name']}** ({self.duration_min} phút)!",
+            embed=embed, view=view,
+        )
+
+
+class _WorkerUpgradeBtn(discord.ui.Button):
+    def __init__(self, guild_id, user_id, worker_kind, cost):
+        cfg = _WORKER_CONFIG[worker_kind]
+        super().__init__(label=f"Nâng cấp ({cost} mango)", style=discord.ButtonStyle.primary)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.worker_kind = worker_kind
+        self.cost = cost
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
+            return
+
+        cfg = _WORKER_CONFIG[self.worker_kind]
+
+        def _upgrade(d):
+            d.setdefault(cfg["field"], {})
+            d[cfg["field"]]["level"] = d[cfg["field"]].get("level", 0) + 1
+            return d
+
+        ok, msg = store.spend_mango_and_apply(
+            self.user_id, self.cost, _upgrade,
+            label=f"Nâng cấp {cfg['name']}",
+        )
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
+        embed, view = build_worker_menu(self.guild_id, self.user_id, self.worker_kind)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class _WorkerPermanentBtn(discord.ui.Button):
+    def __init__(self, guild_id, user_id, worker_kind, cost):
+        super().__init__(label=f"⭐ Vĩnh viễn ({cost:,} mango)", style=discord.ButtonStyle.success)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.worker_kind = worker_kind
+        self.cost = cost
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
+            return
+
+        cfg = _WORKER_CONFIG[self.worker_kind]
+
+        def _make_permanent(d):
+            d.setdefault(cfg["field"], {})
+            d[cfg["field"]]["permanent"] = True
+            d[cfg["field"]]["hired"] = True
+            d[cfg["field"]]["hired_until"] = None
+            return d
+
+        ok, msg = store.spend_mango_and_apply(
+            self.user_id, self.cost, _make_permanent,
+            label=f"Vĩnh viễn {cfg['name']}",
+        )
+        if not ok:
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+
+        embed, view = build_worker_menu(self.guild_id, self.user_id, self.worker_kind)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
 class OpenShopButton(discord.ui.Button):
+    """Xuất hiện khi có gear Cờ lê — mở /shop ngay trong /farm không cần gõ lệnh riêng."""
     def __init__(self, guild_id: int, user_id: int):
         super().__init__(label="🔧 Shop", style=discord.ButtonStyle.primary)
         self.guild_id = guild_id
@@ -326,7 +664,9 @@ class OpenShopButton(discord.ui.Button):
         embed, view = farm_shop.build_farm_shop_embed_and_view(self.guild_id, self.user_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
+
 class HarvestAllButton(discord.ui.Button):
+    """Xuất hiện khi có gear Vợt — thu hoạch toàn bộ trái sẵn sàng ở mọi ô/mọi cây."""
     def __init__(self, guild_id: int, user_id: int):
         super().__init__(label="🥅 Thu hoạch tất cả", style=discord.ButtonStyle.success)
         self.guild_id = guild_id
@@ -334,8 +674,8 @@ class HarvestAllButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         guild_id, user_id = self.guild_id, self.user_id
-        data = farm_store.get_farm_data(guild_id, user_id)
-        weather = farm_store.get_current_weather(guild_id)
+        data = store.get_farm_data(user_id)
+        weather = store.get_current_weather(guild_id)
         yield_level = data.get("upgrades", {}).get("yield_level", 0)
         has_lightning_rod = data.get("gear", {}).get("lightning_rod", False)
 
@@ -369,7 +709,7 @@ class HarvestAllButton(discord.ui.Button):
                         mutations.append("electrified")
                 qty = farm_logic.roll_harvest_quantity(crop_type, yield_level)
 
-                key = farm_store.inventory_key(stage, mutations)
+                key = store.inventory_key(stage, mutations)
                 harvested_summary[key] = harvested_summary.get(key, 0) + qty
                 total_harvested += qty
 
@@ -393,7 +733,7 @@ class HarvestAllButton(discord.ui.Button):
                 d["inventory"][key] = d["inventory"].get(key, 0) + qty
             return d
 
-        farm_store.transaction_farm_data(guild_id, user_id, _apply)
+        store.transaction_farm_data(user_id, _apply)
 
         summary_lines = [f"{qty}x {key.split('|')[0]}" for key, qty in harvested_summary.items()]
         embed, view, file = build_farm_embed_and_view(
@@ -401,6 +741,7 @@ class HarvestAllButton(discord.ui.Button):
             extra_logs=[f"🥅 Đã thu hoạch tất cả: {', '.join(summary_lines)} (tổng {total_harvested} trái)."],
         )
         await interaction.response.edit_message(embed=embed, view=view, attachments=[file])
+
 
 # ==================== QUẢN LÝ Ô (dropdown 2 tầng) ====================
 class PlotChooseDropdown(discord.ui.Select):
@@ -419,8 +760,9 @@ class PlotChooseDropdown(discord.ui.Select):
         embed, view = build_plot_detail(self.guild_id, self.user_id, plot_id)
         await interaction.response.edit_message(content=None, embed=embed, view=view)
 
+
 def build_plot_detail(guild_id: int, user_id: int, plot_id: int):
-    data = farm_store.get_farm_data(guild_id, user_id)
+    data = store.get_farm_data(user_id)
     plot = data.get("plots", {}).get(str(plot_id), {"slots": []})
     slots = plot.get("slots", [])
     water_speed_level = data.get("upgrades", {}).get("water_speed_level", 0)
@@ -453,6 +795,7 @@ def build_plot_detail(guild_id: int, user_id: int, plot_id: int):
     view.add_item(SlotActionDropdown(guild_id, user_id, plot_id, slots))
     return embed, view
 
+
 class SlotActionDropdown(discord.ui.Select):
     def __init__(self, guild_id: int, user_id: int, plot_id: int, slots: list[dict]):
         self.guild_id = guild_id
@@ -477,8 +820,9 @@ class SlotActionDropdown(discord.ui.Select):
         embed, view = build_slot_action_menu(self.guild_id, self.user_id, self.plot_id, slot_index)
         await interaction.response.edit_message(embed=embed, view=view)
 
+
 def build_slot_action_menu(guild_id: int, user_id: int, plot_id: int, slot_index: int):
-    data = farm_store.get_farm_data(guild_id, user_id)
+    data = store.get_farm_data(user_id)
     plot = data.get("plots", {}).get(str(plot_id), {"slots": []})
     slots = plot.get("slots", [])
     slot = slots[slot_index] if slot_index < len(slots) else {"planted": False}
@@ -514,6 +858,7 @@ def build_slot_action_menu(guild_id: int, user_id: int, plot_id: int, slot_index
 
     return embed, view
 
+
 class SeedChooseDropdown(discord.ui.Select):
     def __init__(self, guild_id: int, user_id: int, plot_id: int, slot_index: int):
         self.guild_id = guild_id
@@ -521,7 +866,7 @@ class SeedChooseDropdown(discord.ui.Select):
         self.plot_id = plot_id
         self.slot_index = slot_index
 
-        data = farm_store.get_farm_data(guild_id, user_id)
+        data = store.get_farm_data(user_id)
         seed_inv = data.get("seed_inventory", {})
         options = []
         for cid in farm_config.CROP_ORDER:
@@ -539,7 +884,7 @@ class SeedChooseDropdown(discord.ui.Select):
             return
 
         crop_id = self.values[0]
-        data = farm_store.get_farm_data(self.guild_id, self.user_id)
+        data = store.get_farm_data(self.user_id)
         have_seeds = data.get("seed_inventory", {}).get(crop_id, 0)
         if have_seeds <= 0:
             seed_cost = farm_config.CROPS[crop_id]["seed_cost"]
@@ -555,7 +900,7 @@ class SeedChooseDropdown(discord.ui.Select):
         def _plant(d):
             plot = d["plots"].setdefault(
                 str(self.plot_id),
-                {"slots": [farm_store._empty_slot() for _ in range(farm_config.SLOTS_PER_PLOT)]},
+                {"slots": [store._empty_slot() for _ in range(farm_config.SLOTS_PER_PLOT)]},
             )
             slot = plot["slots"][self.slot_index]
             slot["planted"] = True
@@ -566,13 +911,14 @@ class SeedChooseDropdown(discord.ui.Select):
             d["seed_inventory"][crop_id] = d["seed_inventory"].get(crop_id, 0) - 1
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _plant)
+        store.transaction_farm_data(self.user_id, _plant)
 
         embed, view = build_slot_action_menu(self.guild_id, self.user_id, self.plot_id, self.slot_index)
         await interaction.response.edit_message(
             content=f"🌱 Đã trồng **{farm_config.CROPS[crop_id]['name']}** tại Ô {self.plot_id} - Slot {self.slot_index + 1}.",
             embed=embed, view=view,
         )
+
 
 class WaterSlotButton(discord.ui.Button):
     def __init__(self, guild_id: int, user_id: int, plot_id: int, slot_index: int):
@@ -583,7 +929,7 @@ class WaterSlotButton(discord.ui.Button):
         self.slot_index = slot_index
 
     async def callback(self, interaction: discord.Interaction):
-        data = farm_store.get_farm_data(self.guild_id, self.user_id)
+        data = store.get_farm_data(self.user_id)
         plot = data["plots"].get(str(self.plot_id), {"slots": []})
         slot = plot["slots"][self.slot_index]
 
@@ -606,12 +952,13 @@ class WaterSlotButton(discord.ui.Button):
             s["last_water_at"] = now.isoformat()
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _water)
+        store.transaction_farm_data(self.user_id, _water)
 
         embed, view = build_slot_action_menu(self.guild_id, self.user_id, self.plot_id, self.slot_index)
         await interaction.response.edit_message(
             content=f"💧 Đã tưới (+{gain} progress).", embed=embed, view=view,
         )
+
 
 class HarvestSlotButton(discord.ui.Button):
     def __init__(self, guild_id: int, user_id: int, plot_id: int, slot_index: int):
@@ -622,7 +969,7 @@ class HarvestSlotButton(discord.ui.Button):
         self.slot_index = slot_index
 
     async def callback(self, interaction: discord.Interaction):
-        data = farm_store.get_farm_data(self.guild_id, self.user_id)
+        data = store.get_farm_data(self.user_id)
         plot = data["plots"].get(str(self.plot_id), {"slots": []})
         slot = plot["slots"][self.slot_index]
 
@@ -638,7 +985,7 @@ class HarvestSlotButton(discord.ui.Button):
             )
             return
 
-        weather = farm_store.get_current_weather(self.guild_id)
+        weather = store.get_current_weather(self.guild_id)
         stage = farm_logic.roll_produce_stage(crop_type)
         sprinkler_active, sprinkler_tier = _slot_sprinkler_active(slot)
         mutations = farm_logic.roll_mutations(weather, sprinkler_active, sprinkler_tier)
@@ -655,7 +1002,7 @@ class HarvestSlotButton(discord.ui.Button):
 
         def _harvest(d):
             s = d["plots"][str(self.plot_id)]["slots"][self.slot_index]
-            key = farm_store.inventory_key(stage, mutations)
+            key = store.inventory_key(stage, mutations)
             d.setdefault("inventory", {})
             d["inventory"][key] = d["inventory"].get(key, 0) + qty
             s["planted"] = False
@@ -667,7 +1014,7 @@ class HarvestSlotButton(discord.ui.Button):
             s["active_sprinkler_until"] = None
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _harvest)
+        store.transaction_farm_data(self.user_id, _harvest)
 
         mut_names = [
             farm_config.MUTATIONS_STACKABLE.get(m, farm_config.MUTATIONS_EXCLUSIVE.get(m, {})).get("name", m)
@@ -679,6 +1026,7 @@ class HarvestSlotButton(discord.ui.Button):
         await interaction.response.edit_message(
             content=f"🧺 Thu hoạch {qty}x **{stage}**{mut_text}!", embed=embed, view=view,
         )
+
 
 # ==================== SPRINKLER (chọn ô để kích hoạt) ====================
 class SprinklerPlotChooseDropdown(discord.ui.Select):
@@ -699,12 +1047,13 @@ class SprinklerPlotChooseDropdown(discord.ui.Select):
         view.add_item(SprinklerTierDropdown(self.guild_id, self.user_id, plot_id, self.owned_sprinkler_ids))
         await interaction.response.edit_message(content=f"Chọn loại sprinkler cho Ô {plot_id}:", view=view)
 
+
 class SprinklerTierDropdown(discord.ui.Select):
     def __init__(self, guild_id: int, user_id: int, plot_id: int, owned_sprinkler_ids: list[str]):
         self.guild_id = guild_id
         self.user_id = user_id
         self.plot_id = plot_id
-        data = farm_store.get_farm_data(guild_id, user_id)
+        data = store.get_farm_data(user_id)
         inventory = data.get("sprinkler_inventory", {})
         options = [
             discord.SelectOption(label=f"{farm_config.SPRINKLERS[sid]['name']} (còn {inventory.get(sid, 0)})", value=sid)
@@ -736,7 +1085,7 @@ class SprinklerTierDropdown(discord.ui.Select):
 
             plot = d["plots"].setdefault(
                 str(self.plot_id),
-                {"slots": [farm_store._empty_slot() for _ in range(farm_config.SLOTS_PER_PLOT)]},
+                {"slots": [store._empty_slot() for _ in range(farm_config.SLOTS_PER_PLOT)]},
             )
             for slot in plot["slots"]:
                 slot["active_sprinkler_tier"] = sprinkler_id
@@ -744,7 +1093,7 @@ class SprinklerTierDropdown(discord.ui.Select):
             result_holder["ok"] = True
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _activate)
+        store.transaction_farm_data(self.user_id, _activate)
 
         if not result_holder["ok"]:
             await interaction.response.send_message("Sprinkler này đã hết trong kho.", ephemeral=True)
@@ -755,10 +1104,11 @@ class SprinklerTierDropdown(discord.ui.Select):
             view=None,
         )
 
+
 # ==================== NÂNG CẤP MENU ====================
 def build_upgrade_menu(guild_id: int, user_id: int):
-    data = farm_store.get_farm_data(guild_id, user_id)
-    mango = farm_store.get_mango(guild_id, user_id)
+    data = store.get_farm_data(user_id)
+    mango = store.get_mango(user_id)
 
     embed = discord.Embed(title="⚙️ Nâng cấp nông trại", color=discord.Color.purple())
     embed.add_field(name="🥭 Mango", value=f"{mango}", inline=False)
@@ -815,6 +1165,7 @@ def build_upgrade_menu(guild_id: int, user_id: int):
 
     return embed, view
 
+
 class _UpgradeBtn(discord.ui.Button):
     def __init__(self, guild_id, user_id, kind, cost, label):
         super().__init__(label=f"{label} ({cost} mango)", style=discord.ButtonStyle.primary)
@@ -822,6 +1173,7 @@ class _UpgradeBtn(discord.ui.Button):
         self.user_id = user_id
         self.kind = kind
         self.cost = cost
+        self.upgrade_label = label
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.user_id:
@@ -834,13 +1186,17 @@ class _UpgradeBtn(discord.ui.Button):
             d["upgrades"][field] += 1
             return d
 
-        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.cost, _upgrade)
+        ok, msg = store.spend_mango_and_apply(
+            self.user_id, self.cost, _upgrade,
+            label=self.upgrade_label,
+        )
         if not ok:
             await interaction.response.send_message(msg, ephemeral=True)
             return
 
         embed, view = build_upgrade_menu(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
+
 
 class _UnlockCropBtn(discord.ui.Button):
     def __init__(self, guild_id, user_id, crop_id, cost):
@@ -859,7 +1215,10 @@ class _UnlockCropBtn(discord.ui.Button):
             d["unlocked_crops"][self.crop_id] = True
             return d
 
-        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.cost, _unlock)
+        ok, msg = store.spend_mango_and_apply(
+            self.user_id, self.cost, _unlock,
+            label=f"Mở khoá cây {farm_config.CROPS[self.crop_id]['name']}",
+        )
         if not ok:
             await interaction.response.send_message(msg, ephemeral=True)
             return
@@ -887,23 +1246,24 @@ class _UnlockPlotBtn(discord.ui.Button):
             d["unlocked_plots"][str(self.plot_id)] = True
             d["plots"].setdefault(
                 str(self.plot_id),
-                {"slots": [farm_store._empty_slot() for _ in range(farm_config.SLOTS_PER_PLOT)]},
+                {"slots": [store._empty_slot() for _ in range(farm_config.SLOTS_PER_PLOT)]},
             )
             return d
 
+        label = f"Mở khoá Ô {self.plot_id}"
         if self.currency == "mango":
-            ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.cost, _unlock)
+            ok, msg = store.spend_mango_and_apply(self.user_id, self.cost, _unlock, label=label)
         else:
-            import economy_store
-            new_balance = economy_store.transaction_mango_plus(self.user_id, -self.cost)
+            new_balance = store.transaction_mango(self.user_id, -self.cost, use_plus=True)
             if new_balance is None:
                 ok, msg = False, "Không đủ mango+."
             else:
                 try:
-                    farm_store.transaction_farm_data(self.guild_id, self.user_id, _unlock)
+                    store.transaction_farm_data(self.user_id, _unlock)
                     ok, msg = True, ""
+                    store.log_purchase(self.user_id, label, self.cost, "mango_plus")
                 except Exception:
-                    economy_store.transaction_mango_plus(self.user_id, self.cost)  # rollback
+                    store.transaction_mango(self.user_id, self.cost, use_plus=True)  # rollback
                     ok, msg = False, "Có lỗi xảy ra, giao dịch đã được hoàn tác."
 
         if not ok:
@@ -911,72 +1271,6 @@ class _UnlockPlotBtn(discord.ui.Button):
             return
 
         embed, view = build_upgrade_menu(self.guild_id, self.user_id)
-        await interaction.response.edit_message(embed=embed, view=view)
-
-
-# ==================== FARMER MENU ====================
-def build_farmer_menu(guild_id: int, user_id: int):
-    data = farm_store.get_farm_data(guild_id, user_id)
-    farmer = data["farmer"]
-    level = farmer["level"]
-    stats = farm_logic.farmer_stats(level)
-    cost = farm_logic.upgrade_cost("farmer", level)
-    now = datetime.datetime.utcnow()
-
-    unlocked_plots = data.get("unlocked_plots", {})
-    working_plots = [
-        pid for pid in farm_config.PLOT_ORDER
-        if farm_logic.farmer_can_work_plot(pid, level, unlocked_plots.get(str(pid), False))
-    ]
-
-    embed = discord.Embed(title="🚜 Nông dân", color=discord.Color.dark_green())
-    embed.add_field(name="Trạng thái", value=_farmer_status_text(farmer, now), inline=True)
-    embed.add_field(name="Cấp độ", value=f"Lv.{level}", inline=True)
-    embed.add_field(name="Tự động tưới", value="✅ Bật" if farmer.get("auto_water") else "❌ Tắt", inline=True)
-    embed.add_field(
-        name="Đang làm việc tại",
-        value=", ".join(f"Ô {p}" for p in working_plots) if working_plots else "Chưa đủ điều kiện ở ô nào",
-        inline=False,
-    )
-    embed.add_field(name="Nâng cấp tiếp theo", value=f"{cost} mango (giảm thời gian làm việc)", inline=False)
-    if not farmer.get("permanent"):
-        embed.add_field(
-            name="⭐ Nâng cấp vĩnh viễn",
-            value=f"Không cần thuê lại nữa — {farm_config.FARMER_PERMANENT_COST_MANGO:,} mango",
-            inline=False,
-        )
-
-    view = discord.ui.View(timeout=200)
-    if level < farm_config.FARMER_UPGRADE["max_level"]:
-        view.add_item(_FarmerUpgradeBtn(guild_id, user_id, cost))
-    view.add_item(_FarmerToggleAutoWaterBtn(guild_id, user_id, farmer.get("auto_water", False)))
-    if not farmer.get("permanent"):
-        view.add_item(_FarmerPermanentBtn(guild_id, user_id))
-    return embed, view
-
-
-class _FarmerUpgradeBtn(discord.ui.Button):
-    def __init__(self, guild_id, user_id, cost):
-        super().__init__(label=f"Nâng cấp nông dân ({cost} mango)", style=discord.ButtonStyle.primary)
-        self.guild_id = guild_id
-        self.user_id = user_id
-        self.cost = cost
-
-    async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
-            return
-
-        def _upgrade(d):
-            d["farmer"]["level"] += 1
-            return d
-
-        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.cost, _upgrade)
-        if not ok:
-            await interaction.response.send_message(msg, ephemeral=True)
-            return
-
-        embed, view = build_farmer_menu(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
 
@@ -996,34 +1290,6 @@ class _FarmerToggleAutoWaterBtn(discord.ui.Button):
             d["farmer"]["auto_water"] = not d["farmer"].get("auto_water", False)
             return d
 
-        farm_store.transaction_farm_data(self.guild_id, self.user_id, _toggle)
-        embed, view = build_farmer_menu(self.guild_id, self.user_id)
-        await interaction.response.edit_message(embed=embed, view=view)
-
-
-class _FarmerPermanentBtn(discord.ui.Button):
-    def __init__(self, guild_id, user_id):
-        cost = farm_config.FARMER_PERMANENT_COST_MANGO
-        super().__init__(label=f"⭐ Nâng cấp vĩnh viễn ({cost:,} mango)", style=discord.ButtonStyle.success)
-        self.guild_id = guild_id
-        self.user_id = user_id
-        self.cost = cost
-
-    async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
-            return
-
-        def _make_permanent(d):
-            d["farmer"]["permanent"] = True
-            d["farmer"]["hired"] = True
-            d["farmer"]["hired_until"] = None
-            return d
-
-        ok, msg = farm_store.spend_mango_and_apply(self.guild_id, self.user_id, self.cost, _make_permanent)
-        if not ok:
-            await interaction.response.send_message(msg, ephemeral=True)
-            return
-
-        embed, view = build_farmer_menu(self.guild_id, self.user_id)
+        store.transaction_farm_data(self.user_id, _toggle)
+        embed, view = build_worker_menu(self.guild_id, self.user_id, "farmer")
         await interaction.response.edit_message(embed=embed, view=view)

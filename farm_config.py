@@ -14,7 +14,7 @@ CROPS = {
         "grow_progress_needed": 8,
         "seed_cost": 4,          # giá
         "next_unlock": "lemon",
-        "base_yield": 3,
+        "base_yield": 2,
         "passive_progress_per_min": 8 / (2 * 60),      # đầy trong 2h
         "sells_mango_plus": False,
     },
@@ -43,7 +43,7 @@ CROPS = {
         "unlock_cost": 700,     # nâng cấp mở khoá
         "grow_progress_needed": 30,
         "seed_cost": 28,          # giá
-        "next_unlock": "grape",
+        "next_unlock": None,
         "base_yield": 6,
         "passive_progress_per_min": 30 / (16 * 60),    # đầy trong 16h
         "sells_mango_plus": True,
@@ -51,26 +51,77 @@ CROPS = {
     "grape": {
         "name": "Nho",
         "unlock_cost": 1800,     # nâng cấp mở khoá
-        "grow_progress_needed": 60,
+        "grow_progress_needed": 45,
         "seed_cost": 45,          # giá
         "next_unlock": "watermelon",
         "base_yield": 5,
-        "passive_progress_per_min": 60 / (24 * 60),    # đầy trong 16h
+        "passive_progress_per_min": 45 / (14 * 60),    # đầy trong 14h
         "sells_mango_plus": True,
     },
     "watermelon": {
         "name": "Dưa Hấu",
         "unlock_cost": 4000,     # nâng cấp mở khoá
-        "grow_progress_needed": 100,
+        "grow_progress_needed": 60,
         "seed_cost": 70,          # giá
-        "next_unlock": None,
+        "next_unlock": "carrot",
         "base_yield": 1,
-        "passive_progress_per_min": 100 / (36 * 60),    # đầy trong 16h
+        "passive_progress_per_min": 60 / (18 * 60),    # đầy trong 18h
+        "sells_mango_plus": True,
+    },
+    "carrot": {
+        "name": "Cà Rốt",
+        "unlock_cost": 6000,     # nâng cấp mở khoá
+        "grow_progress_needed": 4,
+        "seed_cost": 2,          # giá
+        "next_unlock": "dragonfruit",
+        "base_yield": 8,
+        "passive_progress_per_min": 4 / 10,  # đầy trong 10 phút
+        "sells_mango_plus": True,
+    },
+    "dragonfruit": {
+        "name": "Thanh Long",
+        "unlock_cost": 8500,     # nâng cấp mở khoá
+        "grow_progress_needed": 90,
+        "seed_cost": 110,          # giá
+        "next_unlock": "coconut",
+        "base_yield": 4,
+        "passive_progress_per_min": 90 / (22 * 60),  # đầy trong 22 giờ
+        "sells_mango_plus": True,
+    },
+    "coconut": {
+        "name": "Dừa",
+        "unlock_cost": 12500,     # nâng cấp mở khoá
+        "grow_progress_needed": 125,
+        "seed_cost": 180,          # giá
+        "next_unlock": "durian",
+        "base_yield": 6,
+        "passive_progress_per_min": 125 / (24 * 60),  # đầy trong 24 giờ
+        "sells_mango_plus": True,
+    },
+    "durian": {
+        "name": "Sầu Riêng",
+        "unlock_cost": 24000,     # nâng cấp mở khoá
+        "grow_progress_needed": 200,
+        "seed_cost": 300,          # giá
+        "next_unlock": None,
+        "base_yield": 3,
+        "passive_progress_per_min": 200 / (40 * 60),  # đầy trong 36 giờ
         "sells_mango_plus": True,
     },
 }
 
-CROP_ORDER = ["mango", "lemon", "orange", "apple","grape","watermelon"]
+CROP_ORDER = [
+    "mango",
+    "lemon",
+    "orange",
+    "apple",
+    "grape",
+    "watermelon",
+    "carrot",
+    "dragonfruit",
+    "coconut",
+    "durian"
+]
 
 # ---------------- SẢN PHẨM & GIÁ BÁN ----------------
 # key: "loại_trái" -> giá bán base (chưa nhân mutation)
@@ -78,26 +129,33 @@ PRODUCE_PRICES = {
     "mango_unripe": 3,
     "mango_ripe": 7,
     "mango_rotten": 1,
-
     "lemon_green": 5,
     "lemon_yellow": 10,
     "lemon_orange": 14,
-    
     "orange_green": 9,
     "orange_ripe": 18,
     "orange_rotten": 4,
-
+    "carrot_small": 8,
+    "carrot_ripe": 20,
+    "carrot_wilted": 4,
     "apple_green": 14,
     "apple_ripe": 28,
     "apple_rotten": 7,
-    
     "grape_green": 18,
     "grape_ripe": 36,
     "grape_rotten": 9,
-
+    "dragonfruit_green": 25,
+    "dragonfruit_ripe": 60,
+    "dragonfruit_overripe": 12,
     "watermelon_small": 40,
     "watermelon_ripe": 80,
     "watermelon_cracked": 20,
+    "coconut_green": 35,
+    "coconut_ripe": 120,
+    "coconut_dry": 20,
+    "durian_small": 140,
+    "durian_ripe": 280,
+    "durian_rotten": 70,
 }
 
 PRODUCE_STAGES = {
@@ -125,6 +183,22 @@ PRODUCE_STAGES = {
         "stages": ["watermelon_small", "watermelon_ripe", "watermelon_cracked"],
         "weights": [20, 70, 10],
     },
+    "carrot": {
+        "stages": ["carrot_small", "carrot_ripe", "carrot_wilted"],
+        "weights": [25, 65, 10],
+    },
+    "dragonfruit": {
+        "stages": ["dragonfruit_green", "dragonfruit_ripe", "dragonfruit_overripe"],
+        "weights": [20, 70, 10],
+    },
+    "coconut": {
+        "stages": ["coconut_green", "coconut_ripe", "coconut_dry"],
+        "weights": [15, 75, 10],
+    },
+    "durian": {
+        "stages": ["durian_small", "durian_ripe", "durian_rotten"],
+        "weights": [20, 65, 15],
+    },
 }
 
 # ---------------- TƯỚI CÂY ----------------
@@ -150,6 +224,16 @@ WATERING_CANS = {
         "price": 1200,
         "progress_range": (5, 9),
     },
+    "mythical": {
+        "name": "Bình tưới thần thoại",
+        "price": 5000,
+        "progress_range": (8, 14),
+    },
+    "divine": {
+        "name": "Bình tưới thần thánh",
+        "price": 20000,
+        "progress_range": (12, 20),
+    },
 }
 
 # ---------------- NÔNG DÂN ----------------
@@ -169,6 +253,56 @@ FARMER_UPGRADE = {
     "max_level": 10,
     "base_cost": 750,       # mango
     "cost_growth": 1.3,
+}
+
+# ---------------- NGƯỜI BÁN NÔNG SẢN (SELLER) ----------------
+# Tự động bán TOÀN BỘ kho nông sản mỗi chu kỳ, nhưng CHỈ xử lý qua lazy-calc
+# (nghĩa là chỉ "bán" cho khoảng thời gian user không mở /farm — user vẫn có thể
+# tự bán tay ở /inventory bất cứ lúc nào trước khi seller kịp tick).
+SELLER_HIRE_COST_MANGO = 700
+SELLER_HIRE_DURATION_MIN = 300       # thuê 5 tiếng/lần
+SELLER_BASE = {
+    "cycle_min": 5,           # mỗi 5 phút bán 1 lần
+}
+SELLER_UPGRADE = {
+    "cycle_reduction_min_per_level": 0.3,
+    "min_cycle_min": 2,
+    "price_bonus_per_level": 0.03,   # +3% giá bán mỗi level
+    "max_level": 10,
+    "base_cost": 600,
+    "cost_growth": 1.3,
+}
+
+# ---------------- NGƯỜI THU THẬP HẠT GIỐNG (COLLECTOR) ----------------
+# Tự động mua MIỄN PHÍ hạt giống (không tốn mango của user), mỗi lần 1-3 hạt.
+# Chỉ mua loại hạt mà level collector cho phép: Lv0-1 -> mango, Lv2-3 -> lemon,
+# Lv4-5 -> orange, Lv6+ -> apple (mỗi 2 level mở thêm 1 loại hạt cao hơn),
+# và loại đó phải đã được unlock (mở khoá cây) trước, nếu chưa unlock thì bỏ qua.
+COLLECTOR_HIRE_COST_MANGO = 400
+COLLECTOR_HIRE_DURATION_MIN = 180    # thuê 3 tiếng/lần
+COLLECTOR_BASE = {
+    "cycle_min": 10,          # mỗi 10 phút mua 1 lần
+    "seeds_per_cycle_range": (1, 3),
+}
+COLLECTOR_UPGRADE = {
+    "cycle_reduction_min_per_level": 0.5,
+    "min_cycle_min": 4,
+    "extra_seed_max_per_2_levels": 1,  # mỗi 2 level +1 vào đầu trên của khoảng random hạt
+    "max_level": 10,
+    "base_cost": 500,
+    "cost_growth": 1.3,
+}
+COLLECTOR_CROP_UNLOCK_LEVEL = {
+    "mango": 0,
+    "lemon": 2,
+    "orange": 4,
+    "apple": 6,
+    "grape": 8,
+    "watermelon": 10,
+    "carrot": 12,
+    "dragonfruit": 14,
+    "coconut": 16,
+    "durian": 18,
 }
 
 # ---------------- NÂNG CẤP NĂNG SUẤT ----------------
@@ -212,28 +346,35 @@ SPRINKLERS = {
         "price": 250,
         "duration_min": 15,
         "progress_boost": 3,
-        "flood_mutation_chance": 0.25,
+        "flood_mutation_chance": 0.20,
     },
     "legendary": {
         "name": "Vòi phun Huyền Thoại",
         "price": 600,
         "duration_min": 20,
         "progress_boost": 5,
-        "flood_mutation_chance": 0.45,
+        "flood_mutation_chance": 0.30,
     },
     "master": {
         "name": "Vòi phun Bậc Thầy",
         "price": 1200,
         "duration_min": 25,
         "progress_boost": 7,
-        "flood_mutation_chance": 0.60,
+        "flood_mutation_chance": 0.45,
     },
     "mythical": {
         "name": "Vòi phun THẦN THOẠI",
         "price": 2500,
         "duration_min": 30,
         "progress_boost": 10,
-        "flood_mutation_chance": 0.80,
+        "flood_mutation_chance": 0.55,
+    },
+    "divine": {
+        "name": "Vòi phun THẦN THÁNH",
+        "price": 8000,
+        "duration_min": 40,
+        "progress_boost": 35,
+        "flood_mutation_chance": 0.65,
     },
 }
 
@@ -244,6 +385,7 @@ SPRINKLER_ORDER = [
     "legendary",
     "master",
     "mythical",
+    "divine",
 ]
 
 # ---------------- ĐỘT BIẾN (MUTATIONS) ----------------
@@ -347,6 +489,7 @@ PLOT_ORDER = [1, 2, 3, 4, 5, 6]
 SLOTS_PER_PLOT = 3
 
 # ---------------- GEAR (dụng cụ) ----------------
+# Gộp scanner/mutation_plucker cũ + 3 dụng cụ mới vào 1 hệ "gear" thống nhất.
 GEAR = {
     "scanner": {
         "name": "Kính lúp",

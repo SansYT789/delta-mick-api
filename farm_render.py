@@ -15,6 +15,12 @@ CROP_COLORS = {
     "lemon":  {"trunk": (99, 68, 38),  "leaf": (70, 140, 60),  "leaf_dark": (48, 108, 46),  "fruit": (232, 214, 60)},
     "orange": {"trunk": (101, 66, 35), "leaf": (54, 122, 54),  "leaf_dark": (36, 92, 40),   "fruit": (235, 140, 30)},
     "apple":  {"trunk": (87, 55, 30),  "leaf": (50, 120, 62),  "leaf_dark": (32, 90, 48),   "fruit": (205, 40, 45)},
+    "grape":       {"trunk": (85, 60, 40),  "leaf": (60, 125, 55),  "leaf_dark": (42, 95, 45),  "fruit": (110, 55, 130)},
+    "watermelon":  {"trunk": (90, 130, 50), "leaf": (65, 140, 60),  "leaf_dark": (45, 105, 48), "fruit": (60, 160, 80)},
+    "carrot":      {"trunk": (70, 110, 45), "leaf": (75, 150, 65),  "leaf_dark": (50, 115, 50), "fruit": (230, 120, 30)},
+    "dragonfruit": {"trunk": (95, 65, 90),  "leaf": (80, 150, 90),  "leaf_dark": (55, 115, 65), "fruit": (220, 50, 110)},
+    "coconut":     {"trunk": (110, 80, 45), "leaf": (55, 135, 70),  "leaf_dark": (38, 100, 52), "fruit": (150, 110, 65)},
+    "durian":      {"trunk": (80, 70, 45),  "leaf": (48, 110, 48),  "leaf_dark": (32, 85, 36),  "fruit": (200, 190, 60)},
 }
 
 FRUIT_COLOR_BY_STAGE = {
@@ -22,6 +28,12 @@ FRUIT_COLOR_BY_STAGE = {
     "lemon_green": (140, 180, 70), "lemon_yellow": (232, 214, 60), "lemon_orange": (230, 150, 40),
     "orange_green": (120, 170, 70), "orange_ripe": (235, 140, 30), "orange_rotten": (110, 90, 60),
     "apple_green": (120, 175, 80), "apple_ripe": (205, 40, 45), "apple_rotten": (120, 85, 60),
+    "grape_green": (140, 180, 80), "grape_ripe": (110, 55, 130), "grape_rotten": (95, 75, 60),
+    "watermelon_small": (90, 160, 80), "watermelon_ripe": (60, 160, 80), "watermelon_cracked": (140, 100, 70),
+    "carrot_small": (150, 180, 90), "carrot_ripe": (230, 120, 30), "carrot_wilted": (140, 110, 60),
+    "dragonfruit_green": (150, 190, 100), "dragonfruit_ripe": (220, 50, 110), "dragonfruit_overripe": (150, 90, 100),
+    "coconut_green": (140, 175, 90), "coconut_ripe": (150, 110, 65), "coconut_dry": (120, 95, 60),
+    "durian_small": (150, 185, 90), "durian_ripe": (200, 190, 60), "durian_rotten": (110, 100, 65),
 }
 
 def _lerp(a, b, t):
