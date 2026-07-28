@@ -1,12 +1,8 @@
 # ---------------- CÂY TRỒNG ----------------
-# Cây (loại) là NÂNG CẤP — unlock 1 lần để mở khoá loại cây, sau đó vẫn phải MUA HẠT GIỐNG
+# Cây (loại) là NÂNG CẤP — unlock 1 lần để mở khoá loại cây
 # (seed_cost) mỗi lần muốn trồng, giá hạt tăng theo cây cao cấp hơn.
-#
-# passive_progress_per_min: tốc độ tự tăng progress mỗi phút KHÔNG CẦN TƯỚI (auto-grow theo thời gian thực,
-# tính cả lúc offline). Tưới nước vẫn có tác dụng CỘNG THÊM progress tức thời (tuỳ chọn, không bắt buộc).
-# Mốc thời gian trồng đầy đủ (0 -> grow_progress_needed) nếu KHÔNG tưới gì: mango 2h / lemon 4h / orange 8h / apple 16h.
-#
-# sells_mango_plus: cây cao cấp (unlock sau) có thể bán ra mango+ ngoài mango thường (tính năng tương lai).
+# passive_progress_per_min: tốc độ tự tăng progress mỗi phút
+# sells_mango_plus: cây cao cấp (unlock sau) có thể bán ra mango+ ngoài mango thường
 CROPS = {
     "mango": {
         "name": "Xoài",
@@ -46,7 +42,7 @@ CROPS = {
         "next_unlock": None,
         "base_yield": 6,
         "passive_progress_per_min": 30 / (16 * 60),    # đầy trong 16h
-        "sells_mango_plus": True,
+        "sells_mango_plus": False,
     },
     "grape": {
         "name": "Nho",
@@ -60,7 +56,7 @@ CROPS = {
     },
     "watermelon": {
         "name": "Dưa Hấu",
-        "unlock_cost": 4000,     # nâng cấp mở khoá
+        "unlock_cost": 3000,     # nâng cấp mở khoá
         "grow_progress_needed": 60,
         "seed_cost": 70,          # giá
         "next_unlock": "carrot",
@@ -70,17 +66,17 @@ CROPS = {
     },
     "carrot": {
         "name": "Cà Rốt",
-        "unlock_cost": 6000,     # nâng cấp mở khoá
+        "unlock_cost": 4000,     # nâng cấp mở khoá
         "grow_progress_needed": 4,
         "seed_cost": 2,          # giá
         "next_unlock": "dragonfruit",
         "base_yield": 8,
-        "passive_progress_per_min": 4 / 10,  # đầy trong 10 phút
+        "passive_progress_per_min": 4 / 30,  # đầy trong 30 phút
         "sells_mango_plus": True,
     },
     "dragonfruit": {
         "name": "Thanh Long",
-        "unlock_cost": 8500,     # nâng cấp mở khoá
+        "unlock_cost": 7500,     # nâng cấp mở khoá
         "grow_progress_needed": 90,
         "seed_cost": 110,          # giá
         "next_unlock": "coconut",
@@ -90,7 +86,7 @@ CROPS = {
     },
     "coconut": {
         "name": "Dừa",
-        "unlock_cost": 12500,     # nâng cấp mở khoá
+        "unlock_cost": 10000,     # nâng cấp mở khoá
         "grow_progress_needed": 125,
         "seed_cost": 180,          # giá
         "next_unlock": "durian",
@@ -100,12 +96,12 @@ CROPS = {
     },
     "durian": {
         "name": "Sầu Riêng",
-        "unlock_cost": 24000,     # nâng cấp mở khoá
+        "unlock_cost": 18000,     # nâng cấp mở khoá
         "grow_progress_needed": 200,
         "seed_cost": 300,          # giá
         "next_unlock": None,
         "base_yield": 3,
-        "passive_progress_per_min": 200 / (40 * 60),  # đầy trong 36 giờ
+        "passive_progress_per_min": 200 / (36 * 60),  # đầy trong 36 giờ
         "sells_mango_plus": True,
     },
 }
@@ -202,7 +198,7 @@ PRODUCE_STAGES = {
 }
 
 # ---------------- TƯỚI CÂY ----------------
-WATER_COOLDOWN_MIN = 60         # 1 giờ / lần tưới (base, chưa cộng upgrade)
+WATER_COOLDOWN_MIN = 60         # 1 giờ / lần tưới
 WATERING_CANS = {
     "basic": {
         "name": "Bình tưới cơ bản",
@@ -239,53 +235,47 @@ WATERING_CANS = {
 # ---------------- NÔNG DÂN ----------------
 FARMER_HIRE_COST_MANGO = 500
 FARMER_HIRE_DURATION_MIN = 120      # thuê 2 tiếng/lần
-FARMER_PERMANENT_COST_MANGO = 30000  # nâng cấp nông dân vĩnh viễn
+FARMER_PERMANENT_COST_MANGO = 6000  # nâng cấp nông dân vĩnh viễn
 FARMER_BASE = {
     "work_duration_min": 10,   # mỗi X phút làm 1 "vòng việc"
     "job_wait_sec": 10,         # chờ giữa các job trong 1 vòng
 }
-# nâng cấp nông dân: giảm work_duration, giảm job_wait
 FARMER_UPGRADE = {
     "work_duration_reduction_min_per_level": 0.5,
     "min_work_duration_min": 5,
     "job_wait_reduction_sec_per_level": 0.3,
     "min_job_wait_sec": 1,
     "max_level": 10,
-    "base_cost": 750,       # mango
+    "base_cost": 750,
     "cost_growth": 1.3,
 }
 
-# ---------------- NGƯỜI BÁN NÔNG SẢN (SELLER) ----------------
-# Tự động bán TOÀN BỘ kho nông sản mỗi chu kỳ, nhưng CHỈ xử lý qua lazy-calc
-# (nghĩa là chỉ "bán" cho khoảng thời gian user không mở /farm — user vẫn có thể
-# tự bán tay ở /inventory bất cứ lúc nào trước khi seller kịp tick).
+# ---------------- NGƯỜI BÁN NÔNG SẢN ----------------
+# Tự động bán TOÀN BỘ kho nông sản mỗi chu kỳ
 SELLER_HIRE_COST_MANGO = 700
 SELLER_HIRE_DURATION_MIN = 300       # thuê 5 tiếng/lần
 SELLER_BASE = {
-    "cycle_min": 5,           # mỗi 5 phút bán 1 lần
+    "cycle_min": 15,           # mỗi X phút bán 1 lần
 }
 SELLER_UPGRADE = {
-    "cycle_reduction_min_per_level": 0.3,
+    "cycle_reduction_min_per_level": 1,
     "min_cycle_min": 2,
-    "price_bonus_per_level": 0.03,   # +3% giá bán mỗi level
+    "price_bonus_per_level": 0.03,   # +3% giá bán/level
     "max_level": 10,
     "base_cost": 600,
     "cost_growth": 1.3,
 }
 
-# ---------------- NGƯỜI THU THẬP HẠT GIỐNG (COLLECTOR) ----------------
-# Tự động mua MIỄN PHÍ hạt giống (không tốn mango của user), mỗi lần 1-3 hạt.
-# Chỉ mua loại hạt mà level collector cho phép: Lv0-1 -> mango, Lv2-3 -> lemon,
-# Lv4-5 -> orange, Lv6+ -> apple (mỗi 2 level mở thêm 1 loại hạt cao hơn),
-# và loại đó phải đã được unlock (mở khoá cây) trước, nếu chưa unlock thì bỏ qua.
+# ---------------- NGƯỜI THU THẬP ----------------
+# Tự động mua MIỄN PHÍ hạt giống, mỗi lần 1-3 hạt.
 COLLECTOR_HIRE_COST_MANGO = 400
 COLLECTOR_HIRE_DURATION_MIN = 180    # thuê 3 tiếng/lần
 COLLECTOR_BASE = {
-    "cycle_min": 10,          # mỗi 10 phút mua 1 lần
+    "cycle_min": 20,          # mỗi X phút mua 1 lần
     "seeds_per_cycle_range": (1, 3),
 }
 COLLECTOR_UPGRADE = {
-    "cycle_reduction_min_per_level": 0.5,
+    "cycle_reduction_min_per_level": 1,
     "min_cycle_min": 4,
     "extra_seed_max_per_2_levels": 1,  # mỗi 2 level +1 vào đầu trên của khoảng random hạt
     "max_level": 10,
@@ -325,7 +315,6 @@ WATER_SPEED_UPGRADE = {
 # ---------------- SPRINKLER ----------------
 # duration_min: hiệu lực kéo dài bao lâu sau khi đặt
 # progress_boost: cộng thêm progress mỗi lần tưới trong thời gian hiệu lực
-# flood_mutation_chance: tỉ lệ ra mutation "ngập nước" khi thu hoạch trong lúc sprinkler hoạt động
 SPRINKLERS = {
     "basic": {
         "name": "Vòi phun Cơ Bản",
@@ -355,27 +344,6 @@ SPRINKLERS = {
         "progress_boost": 5,
         "flood_mutation_chance": 0.30,
     },
-    "master": {
-        "name": "Vòi phun Bậc Thầy",
-        "price": 1200,
-        "duration_min": 25,
-        "progress_boost": 7,
-        "flood_mutation_chance": 0.45,
-    },
-    "mythical": {
-        "name": "Vòi phun THẦN THOẠI",
-        "price": 2500,
-        "duration_min": 30,
-        "progress_boost": 10,
-        "flood_mutation_chance": 0.55,
-    },
-    "divine": {
-        "name": "Vòi phun THẦN THÁNH",
-        "price": 8000,
-        "duration_min": 40,
-        "progress_boost": 35,
-        "flood_mutation_chance": 0.65,
-    },
 }
 
 SPRINKLER_ORDER = [
@@ -383,34 +351,28 @@ SPRINKLER_ORDER = [
     "uncommon",
     "rare",
     "legendary",
-    "master",
-    "mythical",
-    "divine",
 ]
 
-# ---------------- ĐỘT BIẾN (MUTATIONS) ----------------
+# ---------------- ĐỘT BIẾN ----------------
 # "stackable": cộng dồn được với nhau và với nhóm exclusive
 # "exclusive": trong nhóm này chỉ chọn tối đa 1 (không cộng dồn lẫn nhau)
 MUTATIONS_STACKABLE = {
-    "giant": {"name": "To lớn", "mult": 1.5, "base_chance": 0.10},
-    "flooded": {"name": "Ngập nước", "mult": 1.2, "base_chance": 0.0},     # Mưa
-    "frozen": {"name": "Đóng băng", "mult": 1.4, "base_chance": 0.0},      # Tuyết/Băng
-    "windblown": {"name": "Lộng gió", "mult": 1.3, "base_chance": 0.0},    # Gió mạnh
-    "electrified": {"name": "Nhiễm điện", "mult": 1.8, "base_chance": 0.0}, # Sấm sét
-    "burning": {"name": "Rực lửa", "mult": 1.6, "base_chance": 0.0},       # Nắng nóng
-    "crystal": {"name": "Pha lê", "mult": 2.0, "base_chance": 0.002},
+    "giant": {"name": "To lớn", "mult": 1.5, "base_chance": 0.15},
+    "flooded": {"name": "Ngập nước", "mult": 1.2, "base_chance": 0.0},
+    "frozen": {"name": "Đóng băng", "mult": 1.4, "base_chance": 0.0},
+    "windblown": {"name": "Lộng gió", "mult": 1.3, "base_chance": 0.0},
+    "electrified": {"name": "Nhiễm điện", "mult": 1.8, "base_chance": 0.0},
+    "burning": {"name": "Rực lửa", "mult": 1.6, "base_chance": 0.0},
+    "radioactive": {"name": "Phóng xạ", "mult": 2.5, "base_chance": 0.0},
 }
 
 MUTATIONS_EXCLUSIVE = {
-    "gold": {"name": "Vàng", "mult": 2.0, "base_chance": 0.03},
-    "rainbow": {"name": "Bảy sắc", "mult": 3.0, "base_chance": 0.01},
-    "radioactive": {"name": "Phóng xạ", "mult": 4.0, "base_chance": 0.0},  # Mưa hạt nhân
-    "diamond": {"name": "Kim cương", "mult": 5.5, "base_chance": 0.003},
-    "ancient": {"name": "Cổ đại", "mult": 7.0, "base_chance": 0.001},
-    "celestial": {"name": "Thiên thể", "mult": 10.0, "base_chance": 0.0003},
+    "gold": {"name": "Vàng", "mult": 2.0, "base_chance": 0.08},
+    "rainbow": {"name": "Bảy sắc", "mult": 3.0, "base_chance": 0.02},
+    "diamond": {"name": "Kim cương", "mult": 4.0, "base_chance": 0.006},
 }
 
-# ---------------- THỜI TIẾT (cấp guild) ----------------
+# ---------------- THỜI TIẾT ----------------
 WEATHER_TYPES = {
     "clear": {"name": "Trời quang", "weight": 45},
     "rain": {"name": "Mưa", "weight": 20},
@@ -420,7 +382,6 @@ WEATHER_TYPES = {
     "heatwave": {"name": "Nắng gắt", "weight": 4},
     "snow": {"name": "Tuyết", "weight": 2},
     "rainbow": {"name": "Cầu vồng", "weight": 2},
-    "meteor_shower": {"name": "Mưa sao băng", "weight": 0.8},
     "nuclear_rain": {"name": "Mưa hạt nhân", "weight": 0.2},
 }
 WEATHER_CYCLE_MIN = 10  # đổi thời tiết mỗi X phút
@@ -428,55 +389,20 @@ WEATHER_CYCLE_MIN = 10  # đổi thời tiết mỗi X phút
 # hiệu ứng thời tiết lên tỉ lệ mutation khi thu hoạch (cộng thêm vào base_chance)
 WEATHER_MUTATION_EFFECT = {
     "clear": {},
-    # Mưa
-    "rain": {
-        "flooded": 0.35,
-        "giant": 0.05,
-    },
-    # Sương
-    "fog": {
-        "giant": 0.08,
-    },
-    # Gió lớn
-    "wind": {
-        "windblown": 0.25,
-    },
-    # Sấm sét
-    "storm": {
-        "electrified": 0.20,
-        "giant": 0.10,
-    },
-    # Nắng gắt
-    "heatwave": {
-        "burning": 0.20,
-    },
-    # Tuyết
-    "snow": {
-        "frozen": 0.25,
-        "crystal": 0.03,
-    },
-    # Cầu vồng
-    "rainbow": {
-        "rainbow": 0.20,
-        "gold": 0.05,
-    },
-    # Mưa sao băng
-    "meteor_shower": {
-        "crystal": 0.20,
-        "diamond": 0.05,
-    },
-    # Mưa hạt nhân
-    "nuclear_rain": {
-        "radioactive": 0.15,
-        "giant": 0.20,
-    },
+    "rain": {"flooded": 0.35},
+    "fog": {},
+    "wind": {"windblown": 0.25},
+    "storm": {"electrified": 0.20},
+    "heatwave": {"burning": 0.20},
+    "snow": {"frozen": 0.25},
+    "rainbow": {"rainbow": 0.20},
+    "nuclear_rain": {"radioactive": 0.15, "giant": 0.20},
 }
 
-# ---------------- Ô TRỒNG (PLOTS) ----------------
-# Ô 1 miễn phí (mặc định, sẵn có). Ô 2-6 mở khoá tuần tự bằng mango (2,3) hoặc mango+ (4,5,6).
-# farmer_level_required: cấp nông dân tối thiểu để nông dân TỰ ĐỘNG làm việc tại ô này
-# (ngoài điều kiện ô phải được mở khoá bằng tiền trước — cả 2 điều kiện đều bắt buộc).
-# slots_per_plot: mỗi ô trồng được tối đa N loại cây cùng lúc, mỗi slot tiến trình độc lập.
+# ---------------- Ô TRỒNG ----------------
+# Ô 1 miễn phí. Ô 2-6 mở khoá tuần tự bằng mango hoặc mango+
+# farmer_level_required: cấp nông dân tối thiểu
+# slots_per_plot: mỗi ô trồng được tối đa N loại cây cùng lúc
 PLOTS = {
     1: {"unlock_cost": 0, "currency": "mango", "farmer_level_required": 0},
     2: {"unlock_cost": 300, "currency": "mango", "farmer_level_required": 2},
@@ -488,8 +414,7 @@ PLOTS = {
 PLOT_ORDER = [1, 2, 3, 4, 5, 6]
 SLOTS_PER_PLOT = 3
 
-# ---------------- GEAR (dụng cụ) ----------------
-# Gộp scanner/mutation_plucker cũ + 3 dụng cụ mới vào 1 hệ "gear" thống nhất.
+# ---------------- DỤNG CỤ ----------------
 GEAR = {
     "scanner": {
         "name": "Kính lúp",
@@ -507,19 +432,19 @@ GEAR = {
         "name": "Cờ lê",
         "price": 350,
         "currency": "mango",
-        "desc": "Hiện nút Shop ngay trong /farm, không cần gõ /shop riêng.",
+        "desc": "Hiện nút Shop ngay, không cần gõ /shop riêng.",
     },
     "net": {
         "name": "Vợt",
         "price": 1000,
         "currency": "mango",
-        "desc": "Thu hoạch toàn bộ trái đã sẵn sàng ở MỌI ô và MỌI cây chỉ với 1 lần bấm.",
+        "desc": "Thu hoạch toàn bộ trái đã sẵn sàng ở mọi ô và mọi cây chỉ với 1 lần bấm.",
     },
     "lightning_rod": {
         "name": "Cột thu lôi",
         "price": 1500,
         "currency": "mango",
-        "desc": "Tăng thêm cơ hội ra đột biến Nhiễm Điện khi trời sấm sét, áp dụng toàn bộ cây đang trồng.",
+        "desc": "Tăng thêm cơ hội ra đột biến Nhiễm Điện khi trời sấm sét",
         "electrified_bonus_chance": 0.15,
     },
 }
