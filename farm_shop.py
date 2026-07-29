@@ -11,7 +11,7 @@ def build_farm_shop_embed_and_view(guild_id: int, user_id: int):
     data = store.get_farm_data(user_id)
     mango = store.get_mango(user_id)
 
-    embed = discord.Embed(title="🛒 Shop — Nông trại", color=discord.Color.gold())
+    embed = discord.Embed(title="🛒 Cửa hàng nông trại", color=discord.Color.gold())
     embed.add_field(name="🥭 Mango", value=f"{mango}", inline=False)
 
     seed_lines = []
@@ -49,54 +49,35 @@ def build_farm_shop_embed_and_view(guild_id: int, user_id: int):
         inline=False,
     )
 
-    sprinkler_lines = []
-    for sid in farm_config.SPRINKLER_ORDER:
-        cfg = farm_config.SPRINKLERS[sid]
-        have = data.get("sprinkler_inventory", {}).get(sid, 0)
-        sprinkler_lines.append(f"**{cfg['name']}** — {cfg['price']}🥭 (có {have} trong kho)")
-    embed.add_field(name="💦 Sprinkler", value="\n".join(sprinkler_lines), inline=False)
-
-    view = FarmShopView(guild_id, user_id)
+    view = FarmShopView()
     return embed, view
 
 class FarmShopView(discord.ui.View):
-    def __init__(self, guild_id: int, user_id: int):
-        super().__init__(timeout=200)
-        self.guild_id = guild_id
-        self.user_id = user_id
-        self.add_item(FarmShopCategoryDropdown(guild_id, user_id))
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Không phải cửa hàng của bạn.", ephemeral=True)
-            return False
-        return True
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(FarmShopCategoryDropdown())
 
 class FarmShopCategoryDropdown(discord.ui.Select):
-    def __init__(self, guild_id: int, user_id: int):
-        self.guild_id = guild_id
-        self.user_id = user_id
+    def __init__(self):
         options = [
             discord.SelectOption(label="Hạt giống", value="seeds", emoji="🌱"),
             discord.SelectOption(label="Bình tưới", value="cans", emoji="💧"),
             discord.SelectOption(label="Dụng cụ", value="tools", emoji="🔧"),
-            discord.SelectOption(label="Sprinkler", value="sprinklers", emoji="💦"),
             discord.SelectOption(label="Mở khoá ô trồng", value="plots", emoji="🗺️"),
         ]
-        super().__init__(placeholder="Chọn danh mục để mua...", options=options)
+        super().__init__(placeholder="Chọn danh mục để mua...", options=options, custom_id="shop:category")
 
     async def callback(self, interaction: discord.Interaction):
         category = self.values[0]
+        guild_id, user_id = interaction.guild.id, interaction.user.id
         if category == "seeds":
-            embed, view = _build_seed_shop(self.guild_id, self.user_id)
+            embed, view = _build_seed_shop(guild_id, user_id)
         elif category == "cans":
-            embed, view = _build_can_shop(self.guild_id, self.user_id)
+            embed, view = _build_can_shop(guild_id, user_id)
         elif category == "tools":
-            embed, view = _build_tool_shop(self.guild_id, self.user_id)
+            embed, view = _build_tool_shop(guild_id, user_id)
         elif category == "plots":
-            embed, view = _build_plot_shop(self.guild_id, self.user_id)
-        else:
-            embed, view = _build_sprinkler_shop(self.guild_id, self.user_id)
+            embed, view = _build_plot_shop(guild_id, user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
 # ==================== HẠT GIỐNG ====================
@@ -107,7 +88,7 @@ def _build_seed_shop(guild_id: int, user_id: int):
     embed = discord.Embed(title="🌱 Hạt giống", color=discord.Color.blue())
     embed.add_field(name="🥭 Mango", value=f"{mango}", inline=False)
 
-    view = discord.ui.View(timeout=90)
+    view = discord.ui.View(timeout=300)
     for cid in farm_config.CROP_ORDER:
         crop = farm_config.CROPS[cid]
         unlocked = data["unlocked_crops"].get(cid, False)
@@ -121,7 +102,7 @@ def _build_seed_shop(guild_id: int, user_id: int):
 class _BuySeedBtn(discord.ui.Button):
     def __init__(self, guild_id, user_id, crop_id, price):
         super().__init__(
-            label=f"Mua 1 hạt {farm_config.CROPS[crop_id]['name']} ({price}🥭)",
+            label=f"Mua hạt {farm_config.CROPS[crop_id]['name']} ({price}🥭)",
             style=discord.ButtonStyle.success,
         )
         self.guild_id = guild_id
@@ -156,14 +137,14 @@ def _build_can_shop(guild_id: int, user_id: int):
     embed = discord.Embed(title="💧 Bình tưới", color=discord.Color.blue())
     embed.add_field(name="🥭 Mango", value=f"{mango}", inline=False)
 
-    view = discord.ui.View(timeout=200)
+    view = discord.ui.View(timeout=300)
     for cid, cfg in farm_config.WATERING_CANS.items():
         owned = data["watering_can"] == cid
         lo, hi = cfg["progress_range"]
-        price_text = "Đang dùng" if owned else f"{cfg['price']} mango"
+        price_text = "Đang dùng" if owned else f"{cfg['price']} 🥭"
         embed.add_field(
             name=cfg["name"],
-            value=f"+{lo}-{hi} progress/lần tưới — {price_text}",
+            value=f"+{lo}-{hi} tiến trình/lần tưới ({price_text})",
             inline=False,
         )
         if not owned:
@@ -172,7 +153,7 @@ def _build_can_shop(guild_id: int, user_id: int):
 
 class _BuyCanBtn(discord.ui.Button):
     def __init__(self, guild_id, user_id, can_id, price):
-        super().__init__(label=f"Mua {farm_config.WATERING_CANS[can_id]['name']} ({price} mango)", style=discord.ButtonStyle.success)
+        super().__init__(label=f"Mua {farm_config.WATERING_CANS[can_id]['name']} ({price} 🥭)", style=discord.ButtonStyle.success)
         self.guild_id = guild_id
         self.user_id = user_id
         self.can_id = can_id
@@ -204,7 +185,7 @@ def _build_tool_shop(guild_id: int, user_id: int):
     embed = discord.Embed(title="🔧 Dụng cụ (Gear)", color=discord.Color.blue())
     embed.add_field(name="🥭 Mango", value=f"{mango}", inline=False)
 
-    view = discord.ui.View(timeout=90)
+    view = discord.ui.View(timeout=300)
     for gear_id, cfg in farm_config.GEAR.items():
         owned = data.get("gear", {}).get(gear_id, False)
         price_text = "✅ Đã có" if owned else f"{cfg['price']}🥭"
@@ -242,7 +223,6 @@ class _BuyGearBtn(discord.ui.Button):
         embed, view = _build_tool_shop(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
-
 # ==================== MỞ KHOÁ Ô TRỒNG ====================
 def _build_plot_shop(guild_id: int, user_id: int):
     import farm_logic
@@ -256,7 +236,7 @@ def _build_plot_shop(guild_id: int, user_id: int):
     embed.add_field(name="🥭+ Mango Plus", value=f"{mango_plus}", inline=True)
 
     unlocked_plots = data.get("unlocked_plots", {})
-    view = discord.ui.View(timeout=90)
+    view = discord.ui.View(timeout=300)
 
     for pid in farm_config.PLOT_ORDER:
         unlocked = unlocked_plots.get(str(pid), False)
@@ -320,62 +300,7 @@ class _BuyPlotBtn(discord.ui.Button):
         embed, view = _build_plot_shop(self.guild_id, self.user_id)
         await interaction.response.edit_message(embed=embed, view=view)
 
-def _build_sprinkler_shop(guild_id: int, user_id: int):
-    data = store.get_farm_data(user_id)
-    mango = store.get_mango(user_id)
-
-    embed = discord.Embed(title="💦 Sprinkler", color=discord.Color.blue())
-    embed.add_field(name="🥭 Mango", value=f"{mango}", inline=False)
-
-    view = discord.ui.View(timeout=90)
-    for sid in farm_config.SPRINKLER_ORDER:
-        cfg = farm_config.SPRINKLERS[sid]
-        embed.add_field(
-            name=cfg["name"],
-            value=(
-                f"+{cfg['progress_boost']} tiến trình/tưới, {cfg['duration_min']}p hiệu lực\n"
-                f"Tỉ lệ đột biến ngập nước: {cfg['flood_mutation_chance']*100:.0f}% — Giá {cfg['price']}🥭"
-            ),
-            inline=False,
-        )
-        view.add_item(_BuySprinklerBtn(guild_id, user_id, sid, cfg["price"]))
-    return embed, view
-
-class _BuySprinklerBtn(discord.ui.Button):
-    def __init__(self, guild_id, user_id, sprinkler_id, price):
-        super().__init__(
-            label=f"Mua {farm_config.SPRINKLERS[sprinkler_id]['name']} ({price}🥭)",
-            style=discord.ButtonStyle.success,
-        )
-        self.guild_id = guild_id
-        self.user_id = user_id
-        self.sprinkler_id = sprinkler_id
-        self.price = price
-
-    async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Không phải cửa hàng của bạn.", ephemeral=True)
-            return
-        def _buy(d):
-            d.setdefault("sprinkler_inventory", {})
-            d["sprinkler_inventory"][self.sprinkler_id] = d["sprinkler_inventory"].get(self.sprinkler_id, 0) + 1
-            return d
-
-        ok, msg = store.spend_mango_and_apply(
-            self.user_id, self.price, _buy,
-            label=f"Sprinkler {farm_config.SPRINKLERS[self.sprinkler_id]['name']}",
-        )
-        if not ok:
-            await interaction.response.send_message(msg, ephemeral=True)
-            return
-
-        embed, view = _build_sprinkler_shop(self.guild_id, self.user_id)
-        await interaction.response.edit_message(
-            content=f"✅ Đã mua **{farm_config.SPRINKLERS[self.sprinkler_id]['name']}**. Kích hoạt trong `/farm`.",
-            embed=embed, view=view,
-        )
-
-# ==================== BÁN TRÁI (từ inventory) ====================
+# ==================== BÁN TRÁI ====================
 def build_sell_view_and_embed(guild_id: int, user_id: int):
     data = store.get_farm_data(user_id)
     inventory = data.get("inventory", {})
@@ -385,7 +310,7 @@ def build_sell_view_and_embed(guild_id: int, user_id: int):
     embed = discord.Embed(title="💰 Kho nông sản", color=discord.Color.orange())
     if not inventory:
         embed.description = "Kho trống — chưa có gì để bán."
-        return embed, discord.ui.View(timeout=60)
+        return embed, discord.ui.View(timeout=300)
 
     lines = []
     for key, qty in inventory.items():
@@ -394,18 +319,15 @@ def build_sell_view_and_embed(guild_id: int, user_id: int):
             mut_text = f" ({', '.join(mutations)})" if mutations else ""
             value = farm_logic.compute_produce_value(produce, mutations)
             price_text = f"{value} 🥭/trái"
-            lines.append(f"**{produce}**{mut_text} x{qty} — {price_text}")
+            lines.append(f"**{produce}**{mut_text} x{qty} ({price_text})")
         else:
-            # Không có Kính Lúp: KHÔNG hiện giá và KHÔNG hiện tên đột biến,
-            # vì biết base price + tên đột biến là đủ để tự suy ra giá trị chính xác
-            # (mỗi đột biến có hệ số nhân cố định, công khai trong /bill), làm Kính Lúp thành vô dụng.
             mut_hint = " (có đột biến ẩn)" if mutations else ""
-            lines.append(f"**{produce}**{mut_hint} x{qty} — ??? 🥭/trái")
+            lines.append(f"**{produce}**{mut_hint} x{qty}")
     embed.description = "\n".join(lines)
     if not has_scanner:
         embed.set_footer(text="Mua Kính Lúp ở /shop để xem chính xác giá và loại đột biến của từng trái.")
 
-    view = discord.ui.View(timeout=200)
+    view = discord.ui.View(timeout=300)
     view.add_item(SellItemDropdown(guild_id, user_id, inventory))
     if has_plucker:
         pluckable = {k: v for k, v in inventory.items() if store.parse_inventory_key(k)[1]}
@@ -443,7 +365,6 @@ class SellItemDropdown(discord.ui.Select):
 
         store.transaction_mango(self.user_id, total_mango)
 
-        # cây cao cấp (cam, táo) bán ra thêm mango+ ngoài mango thường
         crop_type = produce.split("_")[0]
         bonus_plus_text = ""
         if crop_type in farm_config.CROPS and farm_config.CROPS[crop_type].get("sells_mango_plus"):
@@ -472,7 +393,7 @@ class PluckMutationDropdown(discord.ui.Select):
         key = self.values[0]
         produce, mutations = store.parse_inventory_key(key)
 
-        view = discord.ui.View(timeout=60)
+        view = discord.ui.View(timeout=300)
         view.add_item(PluckChooseMutationDropdown(self.guild_id, self.user_id, key, produce, mutations))
         await interaction.response.send_message(
             f"Chọn đột biến muốn gắp khỏi **{produce}**:", view=view, ephemeral=True
@@ -495,7 +416,7 @@ class PluckChooseMutationDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
+            await interaction.response.send_message("Không phải cửa hàng của bạn.", ephemeral=True)
             return
 
         mutation_to_remove = self.values[0]
@@ -512,6 +433,6 @@ class PluckChooseMutationDropdown(discord.ui.Select):
         all_mut_cfg = {**farm_config.MUTATIONS_STACKABLE, **farm_config.MUTATIONS_EXCLUSIVE}
         mut_name = all_mut_cfg.get(mutation_to_remove, {}).get("name", mutation_to_remove)
         await interaction.response.edit_message(
-            content=f"✂️ Đã gắp đột biến **{mut_name}** khỏi **{self.produce}**. Đột biến này đã biến mất vĩnh viễn.",
+            content=f"✂️ Đã gắp đột biến **{mut_name}** khỏi **{self.produce}**.",
             view=None,
         )

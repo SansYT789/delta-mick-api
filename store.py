@@ -16,19 +16,87 @@ PLUS_TO_MANGO_RATE = 7         # 1 mango+ -> 7 mango
 
 WORK_COOLDOWN_HOURS = 24
 STREAK_BONUS_PER_WEEK = 0.02   # +2%/tuần, cộng dồn
-MAX_POSITION_LEVEL = 5         # 0..5: lao công -> ... -> chủ tịch
+MAX_POSITION_LEVEL = 9         # 0..9: lao công -> ... -> chủ tịch
 
 COMPANIES = {
-    "delta": {"name": "Tập đoàn Delta", "base_pay": (80, 140)},
-    "mango_mustard": {"name": "Tập đoàn Mango Mustard", "base_pay": (60, 110)},
-    "beast": {"name": "Công ty thành phẩm Beast", "base_pay": (70, 120)},
-    "olivier": {"name": "Công ty thực vật Ô liu", "base_pay": (50, 90)},
-    "phonk": {"name": "Tập đoàn Phonk", "base_pay": (90, 150)},
-    "one_more_game": {"name": "Công ty One More Game", "base_pay": (65, 130)},
+    "delta": {
+        "name": "Tập đoàn Delta",
+        "base_pay": (80, 140),
+    },
+    "mango_mustard": {
+        "name": "Tập đoàn Mango Mustard",
+        "base_pay": (60, 110),
+    },
+    "beast": {
+        "name": "Công ty thành phẩm Beast",
+        "base_pay": (70, 120),
+    },
+    "olivier": {
+        "name": "Công ty thực vật Ô liu",
+        "base_pay": (50, 90),
+    },
+    "phonk": {
+        "name": "Tập đoàn Phonk",
+        "base_pay": (90, 150),
+    },
+    "one_more_game": {
+        "name": "Công ty One More Game",
+        "base_pay": (65, 130),
+    },
+    "nova": {
+        "name": "Tập đoàn Nova Technology",
+        "base_pay": (120, 200),
+    },
+    "cyber_core": {
+        "name": "Công ty Cyber Core",
+        "base_pay": (150, 260),
+    },
+    "golden_leaf": {
+        "name": "Tập đoàn Golden Leaf",
+        "base_pay": (100, 180),
+    },
+    "storm": {
+        "name": "Tập đoàn Storm Industries",
+        "base_pay": (180, 320),
+    },
+    "quantum": {
+        "name": "Công ty Quantum Labs",
+        "base_pay": (250, 450),
+    },
+    "mango_global": {
+        "name": "Mango Global Corporation",
+        "base_pay": (350, 600),
+    },
+    "elite_group": {
+        "name": "Tập đoàn Elite Group",
+        "base_pay": (500, 900),
+    },
 }
 
-POSITION_NAMES = ["Lao công", "Nhân viên", "Trưởng nhóm", "Quản lý", "Giám đốc", "Chủ tịch"]
-POSITION_BUFF_PER_LEVEL = 0.08  # +8% lương mỗi cấp chức vụ
+POSITION_NAMES = [
+    "Lao công",
+    "Nhân viên",
+    "Nhân viên cấp cao",
+    "Trưởng nhóm",
+    "Trưởng phòng",
+    "Quản lý",
+    "Giám đốc",
+    "Phó tổng giám đốc",
+    "Tổng giám đốc",
+    "Chủ tịch",
+]
+POSITION_BUFFS = [
+    0.00, # Lao công
+    0.08, # Nhân viên
+    0.15, # Nhân viên cấp cao
+    0.25, # Trưởng nhóm
+    0.35, # Trưởng phòng
+    0.50, # Quản lý
+    0.70, # Giám đốc
+    1.00, # Phó tổng
+    1.40, # Tổng giám đốc
+    2.00, # Chủ tịch
+]
 
 # sự kiện xui: (tên, mô tả, cooldown phạt giờ)
 BAD_EVENTS = [
@@ -44,6 +112,54 @@ BAD_EVENTS = [
         "penalty_hours": 48,
         "chance": 0.05,
     },
+    {
+        "key": "company_layoff",
+        "text": "✂️ Công ty cắt giảm nhân sự lớn — bạn bị tạm cho nghỉ để tái cơ cấu.",
+        "penalty_hours": 36,
+        "chance": 0.08,
+    },
+    {
+        "key": "server_crash",
+        "text": "🖥️ Hệ thống công ty bị sập nghiêm trọng — toàn bộ công việc bị đình trệ.",
+        "penalty_hours": 24,
+        "chance": 0.10,
+    },
+    {
+        "key": "legal_problem",
+        "text": "⚖️ Công ty gặp vấn đề pháp lý — hoạt động bị điều tra và tạm dừng.",
+        "penalty_hours": 60,
+        "chance": 0.04,
+    },
+    {
+        "key": "strike",
+        "text": "📢 Nhân viên đình công — công ty đóng cửa tạm thời để giải quyết tranh chấp.",
+        "penalty_hours": 30,
+        "chance": 0.07,
+    },
+    {
+        "key": "market_crash",
+        "text": "📉 Thị trường lao dốc — công ty giảm tốc độ hoạt động và đóng băng dự án.",
+        "penalty_hours": 40,
+        "chance": 0.06,
+    },
+    {
+        "key": "data_breach",
+        "text": "🔓 Công ty bị rò rỉ dữ liệu — mọi hoạt động bị kiểm tra bảo mật.",
+        "penalty_hours": 18,
+        "chance": 0.12,
+    },
+    {
+        "key": "equipment_failure",
+        "text": "🔧 Thiết bị quan trọng bị hỏng — bạn không thể tiếp tục công việc bình thường.",
+        "penalty_hours": 12,
+        "chance": 0.15,
+    },
+    {
+        "key": "bad_manager",
+        "text": "😡 Quản lý mới quá khắt khe — hiệu suất làm việc giảm mạnh.",
+        "penalty_hours": 20,
+        "chance": 0.10,
+    },
 ]
 
 # Farm
@@ -54,8 +170,6 @@ def _empty_slot() -> dict:
         "progress": 0.0,
         "last_water_at": None,
         "last_passive_tick_at": None,
-        "active_sprinkler_tier": None,
-        "active_sprinkler_until": None,
     }
 
 def _empty_plot() -> dict:
@@ -72,7 +186,6 @@ DEFAULT_FARM_DATA = {
     "seed_inventory": {"mango": 0, "lemon": 0, "orange": 0, "apple": 0, "grape": 0, "watermelon": 0, "carrot": 0, "dragonfruit": 0, "coconut": 0, "durian": 0},
     "unlocked_plots": _default_unlocked_plots(),
     "plots": _default_plots(),
-    "sprinkler_inventory": {},
     "watering_can": "basic",
     "upgrades": {"yield_level": 0, "water_speed_level": 0},
     "gear": {
@@ -81,7 +194,7 @@ DEFAULT_FARM_DATA = {
     },
     "farmer": {
         "hired": False, "hired_until": None, "permanent": False, "level": 0,
-        "last_processed_at": None, "auto_water": False,
+        "last_processed_at": None,
     },
     "seller": {
         "hired": False, "hired_until": None, "permanent": False, "level": 0,
@@ -106,8 +219,6 @@ def _migrate_v1_to_v2(data: dict) -> dict:
         slot0["progress"] = old_plot.get("progress", 0.0)
         slot0["last_water_at"] = old_plot.get("last_water_at")
         slot0["last_passive_tick_at"] = old_plot.get("last_water_at") or now_iso()
-        slot0["active_sprinkler_tier"] = old_plot.get("active_sprinkler_tier")
-        slot0["active_sprinkler_until"] = old_plot.get("active_sprinkler_until")
         plots["1"]["slots"][0] = slot0
         data["plots"] = plots
         data["unlocked_plots"] = _default_unlocked_plots()
@@ -121,9 +232,6 @@ def _migrate_v1_to_v2(data: dict) -> dict:
             "net": False,
             "lightning_rod": False,
         }
-
-    if "farmer" in data and "auto_water" not in data["farmer"]:
-        data["farmer"]["auto_water"] = False
 
     return data
 

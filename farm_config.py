@@ -32,7 +32,7 @@ CROPS = {
         "next_unlock": "apple",
         "base_yield": 5,
         "passive_progress_per_min": 15 / (8 * 60),     # đầy trong 8h
-        "sells_mango_plus": True,
+        "sells_mango_plus": False,
     },
     "apple": {
         "name": "Táo",
@@ -254,6 +254,7 @@ FARMER_UPGRADE = {
 # Tự động bán TOÀN BỘ kho nông sản mỗi chu kỳ
 SELLER_HIRE_COST_MANGO = 700
 SELLER_HIRE_DURATION_MIN = 300       # thuê 5 tiếng/lần
+SELLER_PERMANENT_COST_MANGO = 8500  # nâng cấp nông dân vĩnh viễn
 SELLER_BASE = {
     "cycle_min": 15,           # mỗi X phút bán 1 lần
 }
@@ -270,6 +271,7 @@ SELLER_UPGRADE = {
 # Tự động mua MIỄN PHÍ hạt giống, mỗi lần 1-3 hạt.
 COLLECTOR_HIRE_COST_MANGO = 400
 COLLECTOR_HIRE_DURATION_MIN = 180    # thuê 3 tiếng/lần
+COLLECTOR_PERMANENT_COST_MANGO = 5000  # nâng cấp nông dân vĩnh viễn
 COLLECTOR_BASE = {
     "cycle_min": 20,          # mỗi X phút mua 1 lần
     "seeds_per_cycle_range": (1, 3),
@@ -278,7 +280,7 @@ COLLECTOR_UPGRADE = {
     "cycle_reduction_min_per_level": 1,
     "min_cycle_min": 4,
     "extra_seed_max_per_2_levels": 1,  # mỗi 2 level +1 vào đầu trên của khoảng random hạt
-    "max_level": 10,
+    "max_level": 20,
     "base_cost": 500,
     "cost_growth": 1.3,
 }
@@ -311,47 +313,6 @@ WATER_SPEED_UPGRADE = {
     "base_cost": 400,
     "cost_growth": 1.3,
 }
-
-# ---------------- SPRINKLER ----------------
-# duration_min: hiệu lực kéo dài bao lâu sau khi đặt
-# progress_boost: cộng thêm progress mỗi lần tưới trong thời gian hiệu lực
-SPRINKLERS = {
-    "basic": {
-        "name": "Vòi phun Cơ Bản",
-        "price": 60,
-        "duration_min": 5,
-        "progress_boost": 1,
-        "flood_mutation_chance": 0.05,
-    },
-    "uncommon": {
-        "name": "Vòi phun Không Phổ Biến",
-        "price": 180,
-        "duration_min": 10,
-        "progress_boost": 2,
-        "flood_mutation_chance": 0.12,
-    },
-    "rare": {
-        "name": "Vòi phun Hiếm",
-        "price": 250,
-        "duration_min": 15,
-        "progress_boost": 3,
-        "flood_mutation_chance": 0.20,
-    },
-    "legendary": {
-        "name": "Vòi phun Huyền Thoại",
-        "price": 600,
-        "duration_min": 20,
-        "progress_boost": 5,
-        "flood_mutation_chance": 0.30,
-    },
-}
-
-SPRINKLER_ORDER = [
-    "basic",
-    "uncommon",
-    "rare",
-    "legendary",
-]
 
 # ---------------- ĐỘT BIẾN ----------------
 # "stackable": cộng dồn được với nhau và với nhóm exclusive

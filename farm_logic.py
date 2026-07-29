@@ -14,11 +14,9 @@ def water_cooldown_min(water_speed_level: int) -> int:
     val = farm_config.WATER_COOLDOWN_MIN - water_speed_level * w["cooldown_reduction_min_per_level"]
     return max(w["min_cooldown_min"], val)
 
-def roll_water_progress(can_tier: str, sprinkler_active: bool, sprinkler_tier: str | None) -> float:
+def roll_water_progress(can_tier: str) -> float:
     lo, hi = farm_config.WATERING_CANS[can_tier]["progress_range"]
     progress = random.uniform(lo, hi)
-    if sprinkler_active and sprinkler_tier:
-        progress += farm_config.SPRINKLERS[sprinkler_tier]["progress_boost"]
     return round(progress, 1)
 
 def upgrade_cost(kind: str, current_level: int) -> int:
@@ -44,15 +42,13 @@ def roll_produce_stage(crop_type: str) -> str:
     stages_cfg = farm_config.PRODUCE_STAGES[crop_type]
     return random.choices(stages_cfg["stages"], weights=stages_cfg["weights"], k=1)[0]
 
-def roll_mutations(weather: str, sprinkler_active: bool, sprinkler_tier: str | None) -> list[str]:
+def roll_mutations(weather: str) -> list[str]:
     result = []
     weather_effect = farm_config.WEATHER_MUTATION_EFFECT.get(weather, {})
 
     # --- stackable ---
     for key, cfg in farm_config.MUTATIONS_STACKABLE.items():
         chance = cfg["base_chance"] + weather_effect.get(key, 0.0)
-        if key == "flooded" and sprinkler_active and sprinkler_tier:
-            chance += farm_config.SPRINKLERS[sprinkler_tier]["flood_mutation_chance"]
         if random.random() < chance:
             result.append(key)
 
@@ -80,20 +76,15 @@ def compute_produce_value(produce: str, mutations: list[str]) -> int:
     for m in mutations:
         if m in farm_config.MUTATIONS_EXCLUSIVE:
             exclusive_mult = farm_config.MUTATIONS_EXCLUSIVE[m]["mult"]
-            break  # chỉ có tối đa 1 exclusive trong list
+            break  # chỉ 1 exclusive
 
     value = base * stackable_mult * exclusive_mult
     return max(1, round(value))
 
 def is_farmer_active(farmer: dict, now: datetime.datetime) -> bool:
-    """Farmer còn hoạt động không: đã thuê VÀ (permanent HOẶC chưa hết hạn thuê)."""
     return is_npc_active(farmer, now)
 
 def is_npc_active(npc: dict, now: datetime.datetime) -> bool:
-    """
-    Hàm tổng quát cho mọi NPC có cấu trúc {hired, permanent, hired_until}:
-    farmer, seller, collector. NPC hoạt động khi đã thuê VÀ (permanent HOẶC chưa hết hạn thuê).
-    """
     if not npc.get("hired"):
         return False
     if npc.get("permanent"):
@@ -105,7 +96,6 @@ def is_npc_active(npc: dict, now: datetime.datetime) -> bool:
     return now < until
 
 def seller_stats(level: int) -> dict:
-    """Trả về {'cycle_min': float, 'price_multiplier': float} theo level Seller."""
     s = farm_config.SELLER_UPGRADE
     cycle = farm_config.SELLER_BASE["cycle_min"] - level * s["cycle_reduction_min_per_level"]
     return {
@@ -114,7 +104,6 @@ def seller_stats(level: int) -> dict:
     }
 
 def collector_stats(level: int) -> dict:
-    """Trả về {'cycle_min': float, 'seeds_range': (lo, hi)} theo level Collector."""
     c = farm_config.COLLECTOR_UPGRADE
     cycle = farm_config.COLLECTOR_BASE["cycle_min"] - level * c["cycle_reduction_min_per_level"]
     lo, hi = farm_config.COLLECTOR_BASE["seeds_per_cycle_range"]
@@ -125,11 +114,6 @@ def collector_stats(level: int) -> dict:
     }
 
 def collector_allowed_crops(level: int, unlocked_crops: dict) -> list[str]:
-    """
-    Trả về danh sách loại hạt mà Collector ở level này được phép tự mua:
-    mỗi 2 level mở thêm 1 loại hạt cao hơn (Lv0-1: mango, Lv2-3: +lemon, Lv4-5: +orange, Lv6+: +apple),
-    NHƯNG loại đó phải đã được unlock (mở khoá cây) trước, nếu chưa unlock thì bỏ qua loại đó.
-    """
     allowed = []
     for crop_id, required_level in farm_config.COLLECTOR_CROP_UNLOCK_LEVEL.items():
         if level >= required_level and unlocked_crops.get(crop_id):
@@ -148,13 +132,6 @@ def simulate_farmer_ticks(
     job_wait_sec: int,
     hired_until: datetime.datetime | None = None,
 ) -> int:
-    """
-    Tính số 'vòng việc' farmer đã hoàn thành từ last_processed_at đến now.
-    Mỗi vòng = work_duration_min phút làm + job_wait_sec giây chờ.
-    Nếu hired_until được truyền (thuê tạm thời, không permanent), việc chỉ được tính
-    tới thời điểm hired_until — farmer không làm việc sau khi hết hạn thuê.
-    Trả về số vòng đã hoàn thành (làm tròn xuống).
-    """
     effective_now = now
     if hired_until is not None and hired_until < now:
         effective_now = hired_until
@@ -165,41 +142,24 @@ def simulate_farmer_ticks(
         return 0
     return int(elapsed_sec // cycle_sec)
 
-
-# ---------------- MULTI-PLOT: PASSIVE GROWTH ----------------
 def compute_passive_progress_gain(crop_type: str, last_tick_at: datetime.datetime, now: datetime.datetime) -> float:
-    """
-    Tính progress tự tăng thụ động (KHÔNG cần tưới) từ last_tick_at đến now,
-    dựa trên passive_progress_per_min của crop_type. Luôn >= 0.
-    """
     if now <= last_tick_at:
         return 0.0
     elapsed_min = (now - last_tick_at).total_seconds() / 60
     rate = farm_config.CROPS[crop_type]["passive_progress_per_min"]
     return elapsed_min * rate
 
-
 def plot_unlock_cost(plot_id: int) -> dict:
-    """Trả về {'cost': int, 'currency': 'mango'|'mango_plus'} cho ô đất."""
     cfg = farm_config.PLOTS[plot_id]
     return {"cost": cfg["unlock_cost"], "currency": cfg["currency"]}
 
-
 def farmer_can_work_plot(plot_id: int, farmer_level: int, plot_unlocked: bool) -> bool:
-    """
-    Farmer chỉ được tự động làm việc ở 1 ô nếu CẢ HAI điều kiện đều đúng:
-    1. Ô đã được mở khoá bằng tiền (plot_unlocked).
-    2. Level nông dân >= farmer_level_required của ô đó.
-    Không có trường hợp nào farmer "hack" làm việc ở ô chưa mở khoá dù level đủ cao.
-    """
     if not plot_unlocked:
         return False
     required_level = farm_config.PLOTS[plot_id]["farmer_level_required"]
     return farmer_level >= required_level
 
-
 def next_locked_plot(unlocked_plot_ids: set[int]) -> int | None:
-    """Trả về ID ô tiếp theo cần mở khoá (mở khoá tuần tự), hoặc None nếu đã mở hết."""
     for pid in farm_config.PLOT_ORDER:
         if pid not in unlocked_plot_ids:
             return pid
