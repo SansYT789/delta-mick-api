@@ -1,6 +1,7 @@
 import time
 import asyncio
 import datetime
+import random
 
 import discord
 from discord import app_commands
@@ -8,14 +9,46 @@ from discord.ext import commands
 
 import store
 
-import farm_shop
-import farm_views
-
 MAX_CLEAR_AMOUNT = 2000  # trần an toàn
 BOT_OWNER_ID = 985004175110848512  # chủ bot user id
 
 BOT_VERSION = "1.1.0"
-BOT_DESCRIPTION = "Delta Mick Entertainment đa năng các hoạt động lệnh giải trí: nông trại, kinh tế, mini-game và tiện ích."
+BOT_DESCRIPTION = "Delta Mick Entertainment đa năng các hoạt động lệnh giải trí: kinh tế, mini-game và tiện ích."
+
+_FORTUNES = [
+    {"title": "🏆 Triệu phú tương lai", "desc": "Vận số giàu sang đang chờ, chỉ cần đừng nghỉ việc giữa chừng.", "weight": 3},
+    {"title": "🃏 Bậc thầy scam vặt", "desc": "Chuyên gia hứa suông trong nhóm chat, nhưng tim thì lương thiện.", "weight": 8},
+    {"title": "👻 Người vô hình", "desc": "Nhắn tin không ai rep, gọi không ai nghe — nhưng vẫn được yêu quý âm thầm.", "weight": 10},
+    {"title": "🎭 Diễn viên ẩn danh", "desc": "Ngoài đời trầm tính, trong Discord là drama queen chính hiệu.", "weight": 9},
+    {"title": "🐢 Chậm mà chắc", "desc": "Làm gì cũng trễ deadline nhưng chưa bao giờ thất bại hoàn toàn.", "weight": 12},
+    {"title": "🔥 Ngọn lửa cô đơn", "desc": "Cháy hết mình vì đam mê, nhưng hay bị auto AFK giữa trận.", "weight": 9},
+    {"title": "🎰 Con nghiện may rủi", "desc": "Gacha game nào cũng chơi, tỉ lệ ra rare thấp không cản được đam mê.", "weight": 8},
+    {"title": "🧙 Pháp sư mù mờ", "desc": "Nói chuyện sâu sắc nhưng thật ra đang đoán mò 90% thời gian.", "weight": 10},
+    {"title": "👑 Vua/Nữ hoàng không ngai", "desc": "Sinh ra để lãnh đạo, nhưng cái nhóm chat lại không cho quyền admin.", "weight": 5},
+    {"title": "🍜 Đại sư mì gói", "desc": "Nấu ăn cả đời chỉ giỏi món này, nhưng làm cực ngon.", "weight": 11},
+    {"title": "📉 Nhà đầu tư gãy tay", "desc": "Mua đỉnh bán đáy là chuyên môn, nhưng tinh thần luôn lạc quan.", "weight": 7},
+    {"title": "🌙 Cú đêm chính hiệu", "desc": "3 giờ sáng vẫn online, ban ngày ngủ bù không kịp thở.", "weight": 10},
+    {"title": "🎯 Xạ thủ một phát trúng", "desc": "Ít nói nhưng câu nào ra câu đó, chốt hạ cực gọn.", "weight": 6},
+    {"title": "🐌 Tổ trưởng trì hoãn", "desc": "Việc hôm nay để mai làm, nhưng mai làm thì lại xuất sắc.", "weight": 10},
+    {"title": "🎪 Chú hề của nhóm", "desc": "Luôn là người pha trò đầu tiên, nhưng cũng là người an ủi cuối cùng.", "weight": 9},
+    {"title": "🧊 Băng giá bên ngoài", "desc": "Nhìn lạnh lùng khó gần, thân rồi mới biết ấm áp cỡ nào.", "weight": 8},
+    {"title": "🎲 Người được thần may mắn ưu ái", "desc": "Mở loot box nào cũng trúng, đời thực thì chưa chắc.", "weight": 4},
+    {"title": "🌟 Ngôi sao ẩn danh", "desc": "Tài năng thực sự chưa ai phát hiện — hoặc phát hiện rồi mà chưa dám nói.", "weight": 6},
+]
+
+def _roll_fortune(target_user_id: int) -> dict:
+    rnd = random.Random(target_user_id)
+    total_weight = sum(f["weight"] for f in _FORTUNES)
+    pick = rnd.uniform(0, total_weight)
+    cumulative = 0
+    chosen = _FORTUNES[-1]
+    for f in _FORTUNES:
+        cumulative += f["weight"]
+        if pick <= cumulative:
+            chosen = f
+            break
+    percent = round(chosen["weight"] / total_weight * 100, 1)
+    return {"title": chosen["title"], "desc": chosen["desc"], "percent": percent}
 
 def _fmt_td(seconds: int) -> str:
     seconds = max(0, int(seconds))
@@ -30,25 +63,6 @@ def _fmt_td(seconds: int) -> str:
 class GamesCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    # Farm
-    @app_commands.command(name="shop", description="Mở cửa hàng Delta Mick")
-    async def shop(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        embed, view = farm_shop.build_farm_shop_embed_and_view(interaction.guild.id, interaction.user.id)
-        await interaction.followup.send(embed=embed, view=view)
-
-    @app_commands.command(name="farm", description="Mở nông trại của bạn")
-    async def farm(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        embed, view, file = farm_views.build_farm_embed_and_view(interaction.guild.id, interaction.user.id)
-        await interaction.followup.send(embed=embed, view=view, file=file)
-
-    @app_commands.command(name="inventory", description="Xem kho nông sản và bán trái")
-    async def inventory(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        embed, view = farm_shop.build_sell_view_and_embed(interaction.guild.id, interaction.user.id)
-        await interaction.followup.send(embed=embed, view=view)
 
     # Mod
     @app_commands.command(name="purge", description="Xoá tin nhắn gần nhất trong kênh (tuỳ chọn lọc theo user)")
@@ -181,6 +195,24 @@ class GamesCog(commands.Cog):
         if activity_type and text:
             summary += f"\nHoạt động: **{activity_type.name}** — {text}"
         await interaction.response.send_message(f"✅ Đã cập nhật trạng thái bot.\n{summary}", ephemeral=True)
+
+    @app_commands.command(name="boi-toan", description="Bói toán vui về thân phận của một người")
+    @app_commands.describe(user="Người muốn bói (bỏ trống = bói chính bạn)")
+    async def boi_toan(self, interaction: discord.Interaction, user: discord.Member | None = None):
+        target = user or interaction.user
+        result = _roll_fortune(target.id)
+
+        embed = discord.Embed(
+            title=f"🔮 Bói toán: {target.display_name}",
+            description=f"**Thân phận:** {result['title']}\n{result['desc']}",
+            color=discord.Color.purple(),
+        )
+        embed.add_field(name="Độ hiếm", value=f"{result['percent']}% người có thân phận này", inline=True)
+        embed.set_footer(text="Kết quả bói toán này cố định vĩnh viễn cho người này — bói lại vẫn ra y chang.")
+        if target.display_avatar:
+            embed.set_thumbnail(url=target.display_avatar.url)
+
+        await interaction.response.send_message(embed=embed)
 
     # Utility
     @app_commands.command(name="help", description="Xem danh sách lệnh của bot")
@@ -335,16 +367,12 @@ class GamesCog(commands.Cog):
 
         async def _auto_expire():
             await asyncio.sleep(store.LIXI_DURATION_MIN * 60 + 2)
-            refund = store.refund_expired_lixi(envelope_id)
+            store.refund_expired_lixi(envelope_id)  # tự hoàn tiền + xoá hẳn record Firebase
             view.stop()
             try:
-                for item in view.children:
-                    item.disabled = True
-                final_embed = _build_lixi_embed(envelope_id, closed=True, refund=refund, currency_label=currency_label)
-                if final_embed:
-                    await interaction.edit_original_response(embed=final_embed, view=view)
+                await interaction.delete_original_response()  # xoá hẳn message Discord, không giữ lại
             except discord.HTTPException:
-                pass
+                pass  # message có thể đã bị xoá thủ công từ trước, bỏ qua lỗi
 
         asyncio.create_task(_auto_expire())
 
@@ -709,7 +737,7 @@ class LixiClaimView(discord.ui.View):
 
 
 _COG_DISPLAY_NAMES = {
-    "GamesCog": "🌾 Nông trại, Kinh tế & Tiện ích",
+    "GamesCog": "💵 Kinh tế & Tiện ích",
     "WikiCog": "📖 Tra cứu",
 }
 _COG_ORDER = ["GamesCog", "WikiCog"]

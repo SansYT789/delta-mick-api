@@ -64,12 +64,6 @@ async def main():
     async with bot:
         await bot.load_extension("games")
         await bot.load_extension("games1")
-
-        import farm_views
-        import farm_shop
-        bot.add_view(farm_views.FarmView())
-        bot.add_view(farm_shop.FarmShopView())
-
         await bot.start(os.environ["TOKEN"])
 
 if __name__ == "__main__":

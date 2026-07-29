@@ -56,7 +56,7 @@ class WikiCog(commands.Cog):
         except Exception as e:
             logger.warning(f"Full-text search error: {e}")
 
-        # Fallback 1: nearmatch
+        # Fallback 1: nearmatch — vẫn hữu ích khi query CHÍNH XÁC là tên bài viết (nhanh hơn).
         params_nearmatch = {
             "action": "query",
             "list": "search",

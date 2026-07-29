@@ -5,8 +5,6 @@ import copy
 
 from firebase_admin import db
 
-import farm_config
-
 OWNER_IDS = {985004175110848512}
 MAX_LOG_ENTRIES = 10
 LIXI_DURATION_MIN = 10
@@ -162,196 +160,6 @@ BAD_EVENTS = [
     },
 ]
 
-# Farm
-def _empty_slot() -> dict:
-    return {
-        "planted": False,
-        "seed_type": None,
-        "progress": 0.0,
-        "last_water_at": None,
-        "last_passive_tick_at": None,
-    }
-
-def _empty_plot() -> dict:
-    return {"slots": [_empty_slot() for _ in range(farm_config.SLOTS_PER_PLOT)]}
-
-def _default_plots() -> dict:
-    return {str(pid): _empty_plot() for pid in farm_config.PLOT_ORDER}
-
-def _default_unlocked_plots() -> dict:
-    return {str(pid): (pid == 1) for pid in farm_config.PLOT_ORDER}
-
-DEFAULT_FARM_DATA = {
-    "unlocked_crops": {"mango": True, "lemon": False, "orange": False, "apple": False, "grape": False, "watermelon": False, "carrot": False, "dragonfruit": False, "coconut": False, "durian": False},
-    "seed_inventory": {"mango": 0, "lemon": 0, "orange": 0, "apple": 0, "grape": 0, "watermelon": 0, "carrot": 0, "dragonfruit": 0, "coconut": 0, "durian": 0},
-    "unlocked_plots": _default_unlocked_plots(),
-    "plots": _default_plots(),
-    "watering_can": "basic",
-    "upgrades": {"yield_level": 0, "water_speed_level": 0},
-    "gear": {
-        "scanner": False, "mutation_plucker": False,
-        "wrench": False, "net": False, "lightning_rod": False,
-    },
-    "farmer": {
-        "hired": False, "hired_until": None, "permanent": False, "level": 0,
-        "last_processed_at": None,
-    },
-    "seller": {
-        "hired": False, "hired_until": None, "permanent": False, "level": 0,
-        "last_processed_at": None,
-    },
-    "collector": {
-        "hired": False, "hired_until": None, "permanent": False, "level": 0,
-        "last_processed_at": None,
-    },
-    "inventory": {},
-}
-
-def _migrate_v1_to_v2(data: dict) -> dict:
-    if "plot" in data and "plots" not in data:
-        old_plot = data.pop("plot")
-        old_crop_type = data.pop("crop_type", "mango")
-
-        plots = _default_plots()
-        slot0 = _empty_slot()
-        slot0["planted"] = old_plot.get("planted", False)
-        slot0["seed_type"] = old_plot.get("seed_type") or (old_crop_type if old_plot.get("planted") else None)
-        slot0["progress"] = old_plot.get("progress", 0.0)
-        slot0["last_water_at"] = old_plot.get("last_water_at")
-        slot0["last_passive_tick_at"] = old_plot.get("last_water_at") or now_iso()
-        plots["1"]["slots"][0] = slot0
-        data["plots"] = plots
-        data["unlocked_plots"] = _default_unlocked_plots()
-
-    if "tools" in data and "gear" not in data:
-        old_tools = data.pop("tools")
-        data["gear"] = {
-            "scanner": old_tools.get("scanner", False),
-            "mutation_plucker": old_tools.get("mutation_plucker", False),
-            "wrench": False,
-            "net": False,
-            "lightning_rod": False,
-        }
-
-    return data
-
-def _farm_ref(user_id: int):
-    return db.reference(f"users/{user_id}/farm")
-
-def _weather_ref(guild_id: int):
-    return db.reference(f"guilds/{guild_id}/weather")
-
-def _deep_merge_defaults(data: dict, defaults: dict) -> dict:
-    merged = copy.deepcopy(defaults)
-    if not data:
-        return merged
-    for k, v in data.items():
-        if isinstance(v, dict) and isinstance(defaults.get(k), dict):
-            sub = copy.deepcopy(defaults[k])
-            sub.update(copy.deepcopy(v))
-            merged[k] = sub
-        else:
-            merged[k] = copy.deepcopy(v) if isinstance(v, (dict, list)) else v
-    return merged
-
-def get_farm_data(user_id: int) -> dict:
-    ref = _farm_ref(user_id)
-    data = ref.get()
-    if data is None:
-        fresh_default = copy.deepcopy(DEFAULT_FARM_DATA)
-        ref.set(fresh_default)
-        return fresh_default
-    data = _migrate_v1_to_v2(dict(data))
-    merged = _deep_merge_defaults(data, DEFAULT_FARM_DATA)
-    return merged
-
-def update_farm_data(user_id: int, patch: dict):
-    _farm_ref(user_id).update(patch)
-
-def transaction_farm_data(user_id: int, fn):
-    ref = _farm_ref(user_id)
-
-    def _txn(current):
-        current = _migrate_v1_to_v2(dict(current)) if current else {}
-        merged = _deep_merge_defaults(current, DEFAULT_FARM_DATA)
-        return fn(merged)
-
-    return ref.transaction(_txn)
-
-# Inventory
-def inventory_key(produce: str, mutations: list[str]) -> str:
-    sorted_muts = ",".join(sorted(mutations)) if mutations else ""
-    return f"{produce}|{sorted_muts}"
-
-def parse_inventory_key(key: str) -> tuple[str, list[str]]:
-    produce, _, muts = key.partition("|")
-    mutations = muts.split(",") if muts else []
-    return produce, mutations
-
-def add_to_inventory(user_id: int, produce: str, mutations: list[str], qty: int = 1):
-    key = inventory_key(produce, mutations)
-
-    def _add(d):
-        d.setdefault("inventory", {})
-        d["inventory"][key] = d["inventory"].get(key, 0) + qty
-        return d
-
-    return transaction_farm_data(user_id, _add)
-
-def remove_from_inventory(user_id: int, key: str, qty: int) -> bool:
-    result_holder = {"ok": False}
-
-    def _remove(d):
-        inv = d.setdefault("inventory", {})
-        have = inv.get(key, 0)
-        if have < qty:
-            result_holder["ok"] = False
-            return d
-        remaining = have - qty
-        if remaining <= 0:
-            inv.pop(key, None)
-        else:
-            inv[key] = remaining
-        result_holder["ok"] = True
-        return d
-
-    transaction_farm_data(user_id, _remove)
-    return result_holder["ok"]
-
-# Weather
-def _roll_weather() -> str:
-    types = list(farm_config.WEATHER_TYPES.keys())
-    weights = [farm_config.WEATHER_TYPES[t]["weight"] for t in types]
-    return random.choices(types, weights=weights, k=1)[0]
-
-def get_current_weather(guild_id: int) -> str:
-    ref = _weather_ref(guild_id)
-    data = ref.get()
-    now = datetime.datetime.utcnow()
-
-    if data is None or "next_change_at" not in data:
-        new_weather = _roll_weather()
-        next_change = now + datetime.timedelta(minutes=farm_config.WEATHER_CYCLE_MIN)
-        ref.set({
-            "current": new_weather,
-            "changed_at": now.isoformat(),
-            "next_change_at": next_change.isoformat(),
-        })
-        return new_weather
-
-    next_change_at = parse_iso(data["next_change_at"])
-    if now >= next_change_at:
-        new_weather = _roll_weather()
-        next_change = now + datetime.timedelta(minutes=farm_config.WEATHER_CYCLE_MIN)
-        ref.update({
-            "current": new_weather,
-            "changed_at": now.isoformat(),
-            "next_change_at": next_change.isoformat(),
-        })
-        return new_weather
-
-    return data["current"]
-
 # Utility
 def now_iso() -> str:
     return datetime.datetime.utcnow().isoformat()
@@ -374,6 +182,10 @@ def get_mango_plus(user_id: int) -> int:
     return val or 0
 
 def transaction_mango(user_id: int, delta: int, use_plus: bool = False):
+    """
+    Trả về SỐ DƯ MỚI nếu giao dịch thành công.
+    Trả về None nếu không đủ tiền (delta âm khiến số dư < 0) — không có gì thay đổi.
+    """
     ref = _mango_plus_ref(user_id) if use_plus else _mango_ref(user_id)
     failed = {"insufficient": False}
 
@@ -706,11 +518,18 @@ def claim_lixi(envelope_id: str, user_id: int) -> tuple[bool, str, int]:
     return True, "", amount
 
 def refund_expired_lixi(envelope_id: str) -> int:
+    """
+    Hoàn lại phần chưa phát cho người tạo, rồi XOÁ HẲN record khỏi Firebase
+    (không giữ lại lì xì đã đóng — tránh phình dữ liệu vô ích theo thời gian).
+    """
     ref = _lixi_ref(envelope_id)
-    result_holder = {"refund": 0, "creator_id": None, "currency": "mango"}
+    result_holder = {"refund": 0, "creator_id": None, "currency": "mango", "already_closed": False}
 
     def _txn(envelope):
-        if envelope is None or envelope.get("closed"):
+        if envelope is None:
+            return envelope
+        if envelope.get("closed"):
+            result_holder["already_closed"] = True
             return envelope
         remaining = envelope.get("remaining_amount", 0)
         envelope["closed"] = True
@@ -729,6 +548,11 @@ def refund_expired_lixi(envelope_id: str) -> int:
             transaction_mango(creator_id, refund)
         else:
             transaction_mango(creator_id, refund, use_plus=True)
+
+    # Xoá hẳn record khỏi Firebase — không giữ lại lì xì đã đóng.
+    # Nếu đã closed từ trước (race condition với claim_lixi cuối cùng), vẫn xoá bình thường.
+    ref.delete()
+
     return refund
 
 # Bill
