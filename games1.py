@@ -156,23 +156,29 @@ class WikiCog(commands.Cog):
         cached = self._get_cached(cache_key)
         if cached:
             return cached
-        
+
         async with aiohttp.ClientSession() as session:
             for lang in WIKI_LANGS_TRY_ORDER:
+                logger.info(f"Trying {lang} Wikipedia for: {query}")
+
                 # Try direct summary first
-                data = await self._wiki_get_summary(session, lang, query)
-                if data:
-                    self._set_cache(cache_key, data, lang)
-                    return data, lang
-                
-                # Search for title
                 found_title = await self._wiki_search_title(session, lang, query)
                 if found_title:
+                    logger.info(f"Found title in {lang}: {found_title}")
                     data = await self._wiki_get_summary(session, lang, found_title)
                     if data:
+                        logger.info(f"Found summary for title in {lang}")
                         self._set_cache(cache_key, data, lang)
                         return data, lang
-            
+
+                # Search for title
+                data = await self._wiki_get_summary(session, lang, query)
+                if data:
+                    logger.info(f"Found direct summary in {lang}")
+                    self._set_cache(cache_key, data, lang)
+                    return data, lang
+
+            logger.info(f"No results found for: {query}")
             return None, None
 
     @app_commands.command(name="wiki", description="Tìm kiếm từ khoá trên Wikipedia")
