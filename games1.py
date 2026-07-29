@@ -36,6 +36,27 @@ class WikiCog(commands.Cog):
     async def _wiki_search_title(self, session: aiohttp.ClientSession, lang: str, query: str) -> Optional[str]:
         url = f"https://{lang}.wikipedia.org/w/api.php"
 
+        params_fulltext = {
+            "action": "query",
+            "list": "search",
+            "srsearch": query,
+            "format": "json",
+            "srlimit": 3,
+            "srwhat": "text",
+        }
+
+        try:
+            async with session.get(url, params=params_fulltext, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    results = data.get("query", {}).get("search", [])
+                    if results:
+                        logger.info(f"✅ Full-text search found: {results[0]['title']}")
+                        return results[0]["title"]
+        except Exception as e:
+            logger.warning(f"Full-text search error: {e}")
+
+        # Fallback 1: nearmatch
         params_nearmatch = {
             "action": "query",
             "list": "search",

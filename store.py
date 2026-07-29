@@ -374,10 +374,6 @@ def get_mango_plus(user_id: int) -> int:
     return val or 0
 
 def transaction_mango(user_id: int, delta: int, use_plus: bool = False):
-    """
-    Trả về SỐ DƯ MỚI nếu giao dịch thành công.
-    Trả về None nếu không đủ tiền (delta âm khiến số dư < 0) — không có gì thay đổi.
-    """
     ref = _mango_plus_ref(user_id) if use_plus else _mango_ref(user_id)
     failed = {"insufficient": False}
 
