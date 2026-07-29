@@ -35,47 +35,106 @@ class WikiCog(commands.Cog):
     
     async def _wiki_search_title(self, session: aiohttp.ClientSession, lang: str, query: str) -> Optional[str]:
         url = f"https://{lang}.wikipedia.org/w/api.php"
-        params = {
+
+        params_opensearch = {
+            "action": "opensearch",
+            "search": query,
+            "limit": 3,
+            "namespace": 0,
+            "format": "json",
+        }
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                async with session.get(url, params=params_opensearch, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        # data = [query, [titles], [descriptions], [urls]]
+                        if len(data) > 1 and data[1]:
+                            return data[1][0]  # Trả về title gợi ý đầu tiên
+                    break  # Thoát nếu thành công
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                if attempt == MAX_RETRIES - 1:
+                    logger.warning(f"Opensearch failed for '{query}': {e}")
+                else:
+                    await asyncio.sleep(0.5 * (attempt + 1))
+
+        params_prefix = {
+            "action": "query",
+            "list": "prefixsearch",
+            "pssearch": query,
+            "format": "json",
+            "pslimit": 3,
+        }
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                async with session.get(url, params=params_prefix, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        results = data.get("query", {}).get("prefixsearch", [])
+                        if results:
+                            return results[0]["title"]
+                    break
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                if attempt == MAX_RETRIES - 1:
+                    logger.warning(f"Prefix search failed for '{query}': {e}")
+                else:
+                    await asyncio.sleep(0.5 * (attempt + 1))
+
+        params_nearmatch = {
             "action": "query",
             "list": "search",
             "srsearch": query,
             "format": "json",
-            "srlimit": 1,
+            "srlimit": 3,
+            "srwhat": "nearmatch",  # Tìm gần đúng
         }
-        
+
         for attempt in range(MAX_RETRIES):
             try:
-                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
-                    if resp.status != 200:
-                        return None
-                    data = await resp.json()
-                    results = data.get("query", {}).get("search", [])
-                    return results[0]["title"] if results else None
+                async with session.get(url, params=params_nearmatch, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        results = data.get("query", {}).get("search", [])
+                        if results:
+                            return results[0]["title"]
+                    break
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                 if attempt == MAX_RETRIES - 1:
-                    logger.warning(f"Failed to search {lang} Wikipedia for '{query}': {e}")
-                    return None
-                await asyncio.sleep(0.5 * (attempt + 1))
+                    logger.warning(f"Near match failed for '{query}': {e}")
+                else:
+                    await asyncio.sleep(0.5 * (attempt + 1))
         return None
     
     async def _wiki_get_summary(self, session: aiohttp.ClientSession, lang: str, title: str) -> Optional[dict]:
-        encoded_title = urllib.parse.quote(title.replace(" ", "_"))
-        url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{encoded_title}"
-        
-        for attempt in range(MAX_RETRIES):
-            try:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
-                    if resp.status != 200:
-                        return None
-                    data = await resp.json()
-                    if data.get("type") == "disambiguation":
-                        return None
-                    return data
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                if attempt == MAX_RETRIES - 1:
-                    logger.warning(f"Failed to get summary from {lang} Wikipedia for '{title}': {e}")
-                    return None
-                await asyncio.sleep(0.5 * (attempt + 1))
+        title_variants = [
+            title,                          # Original
+            title.replace(" ", "_"),        # Replace spaces
+            title.title(),                  # Title case
+            title.lower(),                  # Lowercase
+            title.capitalize(),             # Capitalize first letter
+        ]
+
+        unique_titles = list(dict.fromkeys(title_variants))
+
+        for t in unique_titles:
+            encoded_title = urllib.parse.quote(t)
+            url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{encoded_title}"
+
+            for attempt in range(MAX_RETRIES):
+                try:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if data.get("type") != "disambiguation":
+                                return data
+                        break  # Thoát nếu thành công hoặc lỗi không phải timeout
+                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                    if attempt == MAX_RETRIES - 1:
+                        logger.warning(f"Failed to get summary for '{t}': {e}")
+                    else:
+                        await asyncio.sleep(0.5 * (attempt + 1))
         return None
     
     def _truncate_extract(self, extract: str, max_length: int = 400) -> str:
