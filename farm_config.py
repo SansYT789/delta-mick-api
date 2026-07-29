@@ -67,11 +67,11 @@ CROPS = {
     "carrot": {
         "name": "Cà Rốt",
         "unlock_cost": 4000,     # nâng cấp mở khoá
-        "grow_progress_needed": 4,
-        "seed_cost": 2,          # giá
+        "grow_progress_needed": 20,
+        "seed_cost": 20,          # giá
         "next_unlock": "dragonfruit",
         "base_yield": 8,
-        "passive_progress_per_min": 4 / 30,  # đầy trong 30 phút
+        "passive_progress_per_min": 20 / 30,  # đầy trong 30 phút
         "sells_mango_plus": True,
     },
     "dragonfruit": {
@@ -79,29 +79,9 @@ CROPS = {
         "unlock_cost": 7500,     # nâng cấp mở khoá
         "grow_progress_needed": 90,
         "seed_cost": 110,          # giá
-        "next_unlock": "coconut",
+        "next_unlock": None,
         "base_yield": 4,
         "passive_progress_per_min": 90 / (22 * 60),  # đầy trong 22 giờ
-        "sells_mango_plus": True,
-    },
-    "coconut": {
-        "name": "Dừa",
-        "unlock_cost": 10000,     # nâng cấp mở khoá
-        "grow_progress_needed": 125,
-        "seed_cost": 180,          # giá
-        "next_unlock": "durian",
-        "base_yield": 6,
-        "passive_progress_per_min": 125 / (24 * 60),  # đầy trong 24 giờ
-        "sells_mango_plus": True,
-    },
-    "durian": {
-        "name": "Sầu Riêng",
-        "unlock_cost": 18000,     # nâng cấp mở khoá
-        "grow_progress_needed": 200,
-        "seed_cost": 300,          # giá
-        "next_unlock": None,
-        "base_yield": 3,
-        "passive_progress_per_min": 200 / (36 * 60),  # đầy trong 36 giờ
         "sells_mango_plus": True,
     },
 }
@@ -115,12 +95,10 @@ CROP_ORDER = [
     "watermelon",
     "carrot",
     "dragonfruit",
-    "coconut",
-    "durian"
 ]
 
 # ---------------- SẢN PHẨM & GIÁ BÁN ----------------
-# key: "loại_trái" -> giá bán base (chưa nhân mutation)
+# key: "loại_trái" -> giá bán base
 PRODUCE_PRICES = {
     "mango_unripe": 3,
     "mango_ripe": 7,
@@ -146,12 +124,6 @@ PRODUCE_PRICES = {
     "watermelon_small": 40,
     "watermelon_ripe": 80,
     "watermelon_cracked": 20,
-    "coconut_green": 35,
-    "coconut_ripe": 120,
-    "coconut_dry": 20,
-    "durian_small": 140,
-    "durian_ripe": 280,
-    "durian_rotten": 70,
 }
 
 PRODUCE_STAGES = {
@@ -187,14 +159,6 @@ PRODUCE_STAGES = {
         "stages": ["dragonfruit_green", "dragonfruit_ripe", "dragonfruit_overripe"],
         "weights": [20, 70, 10],
     },
-    "coconut": {
-        "stages": ["coconut_green", "coconut_ripe", "coconut_dry"],
-        "weights": [15, 75, 10],
-    },
-    "durian": {
-        "stages": ["durian_small", "durian_ripe", "durian_rotten"],
-        "weights": [20, 65, 15],
-    },
 }
 
 # ---------------- TƯỚI CÂY ----------------
@@ -219,16 +183,6 @@ WATERING_CANS = {
         "name": "Bình tưới bậc thầy",
         "price": 1200,
         "progress_range": (5, 9),
-    },
-    "mythical": {
-        "name": "Bình tưới thần thoại",
-        "price": 5000,
-        "progress_range": (8, 14),
-    },
-    "divine": {
-        "name": "Bình tưới thần thánh",
-        "price": 20000,
-        "progress_range": (12, 20),
     },
 }
 
@@ -280,7 +234,7 @@ COLLECTOR_UPGRADE = {
     "cycle_reduction_min_per_level": 1,
     "min_cycle_min": 4,
     "extra_seed_max_per_2_levels": 1,  # mỗi 2 level +1 vào đầu trên của khoảng random hạt
-    "max_level": 20,
+    "max_level": 15,
     "base_cost": 500,
     "cost_growth": 1.3,
 }
@@ -293,8 +247,6 @@ COLLECTOR_CROP_UNLOCK_LEVEL = {
     "watermelon": 10,
     "carrot": 12,
     "dragonfruit": 14,
-    "coconut": 16,
-    "durian": 18,
 }
 
 # ---------------- NÂNG CẤP NĂNG SUẤT ----------------
@@ -369,11 +321,9 @@ PLOTS = {
     2: {"unlock_cost": 300, "currency": "mango", "farmer_level_required": 2},
     3: {"unlock_cost": 900, "currency": "mango", "farmer_level_required": 4},
     4: {"unlock_cost": 150, "currency": "mango_plus", "farmer_level_required": 6},
-    5: {"unlock_cost": 400, "currency": "mango_plus", "farmer_level_required": 8},
-    6: {"unlock_cost": 900, "currency": "mango_plus", "farmer_level_required": 10},
 }
-PLOT_ORDER = [1, 2, 3, 4, 5, 6]
-SLOTS_PER_PLOT = 3
+PLOT_ORDER = [1, 2, 3, 4]
+SLOTS_PER_PLOT = 2
 
 # ---------------- DỤNG CỤ ----------------
 GEAR = {

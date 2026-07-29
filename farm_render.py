@@ -121,11 +121,8 @@ def render_plant_stage(colors: dict, progress_ratio: float, ready: bool,
     return canvas
 
 def render_farm_image(crop_type: str, planted: bool, progress: float, needed: float,
-                       stage_preview: str | None = None, sprinkler_active: bool = False,
+                       stage_preview: str | None = None,
                        soil_image_path: str = SOIL_BASE_PATH) -> bytes:
-    """
-    [Giữ lại cho tương thích] Ghép 1 cây đơn lẻ lên ảnh nền đất — dùng khi chỉ có 1 ô/1 slot.
-    """
     base = Image.open(soil_image_path).convert("RGBA")
 
     if planted:
@@ -138,9 +135,6 @@ def render_farm_image(crop_type: str, planted: bool, progress: float, needed: fl
         paste_x = anchor_x - plant_img.width // 2
         paste_y = anchor_y - plant_img.height + 10
         base.alpha_composite(plant_img, dest=(paste_x, paste_y))
-
-        if sprinkler_active:
-            _draw_rain_drops(base, anchor_x, anchor_y)
 
     buf = io.BytesIO()
     base.convert("RGB").save(buf, format="PNG")
@@ -159,20 +153,16 @@ def _draw_rain_drops(base: Image.Image, anchor_x: int, anchor_y: int, seed: int 
 
 def render_multi_plot_image(plots_render_data: list[dict], soil_image_path: str = SOIL_BASE_PATH) -> bytes:
     """
-    Vẽ nhiều cây nhỏ trên cùng 1 ảnh nền đất, sắp theo lưới ô x slot.
-
     plots_render_data: list các dict, mỗi dict ứng với 1 Ô ĐÃ MỞ KHOÁ:
         {
             "plot_id": int,
             "unlocked": True,
             "slots": [
                 {"planted": bool, "crop_type": str|None, "progress": float, "needed": float,
-                 "stage_preview": str|None, "sprinkler_active": bool}
-                ... (đúng SLOTS_PER_PLOT phần tử, phần tử planted=False nếu ô trống)
+                 "stage_preview": str|None}
             ]
         }
-    Chỉ vẽ các ô có unlocked=True. Ô khoá không xuất hiện trên ảnh (tránh rối mắt).
-    Layout: mỗi ô chiếm 1 "cụm" gồm 3 cây nhỏ nằm ngang, các cụm xếp thành lưới theo số ô đã mở khoá.
+    Chỉ vẽ các ô có unlocked=True. Ô khoá không xuất hiện trên ảnh
     """
     base = Image.open(soil_image_path).convert("RGBA")
     W, H = base.size
@@ -236,9 +226,6 @@ def render_multi_plot_image(plots_render_data: list[dict], soil_image_path: str 
             paste_x = int(sx - plant_img.width / 2)
             paste_y = int(sy - plant_img.height + 8)
             base.alpha_composite(plant_img, dest=(paste_x, paste_y))
-
-            if slot.get("sprinkler_active"):
-                _draw_rain_drops(base, int(sx), int(sy), seed=idx * 10 + si)
 
     buf = io.BytesIO()
     base.convert("RGB").save(buf, format="PNG")
