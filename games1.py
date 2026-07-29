@@ -36,6 +36,26 @@ class WikiCog(commands.Cog):
     async def _wiki_search_title(self, session: aiohttp.ClientSession, lang: str, query: str) -> Optional[str]:
         url = f"https://{lang}.wikipedia.org/w/api.php"
 
+        params_nearmatch = {
+            "action": "query",
+            "list": "search",
+            "srsearch": query,
+            "format": "json",
+            "srlimit": 3,
+            "srwhat": "nearmatch",
+        }
+
+        try:
+            async with session.get(url, params=params_nearmatch, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    results = data.get("query", {}).get("search", [])
+                    if results:
+                        logger.info(f"✅ Near match found: {results[0]['title']}")
+                        return results[0]["title"]
+        except Exception as e:
+            logger.warning(f"Near match error: {e}")
+
         params_prefix = {
             "action": "query",
             "list": "prefixsearch",
@@ -76,26 +96,6 @@ class WikiCog(commands.Cog):
                         logger.info(f"⚠️ Opensearch no suggestions for '{query}'")
         except Exception as e:
             logger.warning(f"Opensearch error: {e}")
-
-        params_nearmatch = {
-            "action": "query",
-            "list": "search",
-            "srsearch": query,
-            "format": "json",
-            "srlimit": 3,
-            "srwhat": "nearmatch",
-        }
-
-        try:
-            async with session.get(url, params=params_nearmatch, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    results = data.get("query", {}).get("search", [])
-                    if results:
-                        logger.info(f"✅ Near match found: {results[0]['title']}")
-                        return results[0]["title"]
-        except Exception as e:
-            logger.warning(f"Near match error: {e}")
 
         logger.info(f"❌ No title found for '{query}'")
         return None
