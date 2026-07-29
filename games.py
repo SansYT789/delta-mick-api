@@ -243,7 +243,8 @@ class GamesCog(commands.Cog):
 
     @app_commands.command(name="bill", description="Xem hoá đơn — lịch sử mua sắm gần đây của bạn")
     async def bill(self, interaction: discord.Interaction):
-        log = store.get_purchase_log(interaction.user.id, limit=20)
+        max_log = store.MAX_LOG_ENTRIES or 10
+        log = store.get_purchase_log(interaction.user.id, limit=max_log)
 
         if not log:
             await interaction.response.send_message(

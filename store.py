@@ -8,7 +8,7 @@ from firebase_admin import db
 import farm_config
 
 OWNER_IDS = {985004175110848512}
-MAX_LOG_ENTRIES = 20
+MAX_LOG_ENTRIES = 10
 LIXI_DURATION_MIN = 10
 
 MANGO_TO_PLUS_RATE = 0.1       # 1 mango -> 0.1 mango+
