@@ -297,7 +297,7 @@ class GamesCog(commands.Cog):
                 f"Cảm ơn {mentions} đã chơi — mỗi người nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+**",
             )
         else:
-            await message.reply(f"{row}\nCòn **{result['guesses_left']}** lượt đoán.")
+            await message.reply(f"`{content}`\n{row}\nCòn **{result['guesses_left']}** lượt đoán.")
 
     @app_commands.command(name="mango", description="Xem số mango của bạn hoặc người khác")
     @app_commands.describe(user="Người muốn xem (bỏ trống = xem của bạn)")
