@@ -182,10 +182,6 @@ def get_mango_plus(user_id: int) -> int:
     return val or 0
 
 def transaction_mango(user_id: int, delta: int, use_plus: bool = False):
-    """
-    Trả về SỐ DƯ MỚI nếu giao dịch thành công.
-    Trả về None nếu không đủ tiền (delta âm khiến số dư < 0) — không có gì thay đổi.
-    """
     ref = _mango_plus_ref(user_id) if use_plus else _mango_ref(user_id)
     failed = {"insufficient": False}
 
@@ -518,10 +514,6 @@ def claim_lixi(envelope_id: str, user_id: int) -> tuple[bool, str, int]:
     return True, "", amount
 
 def refund_expired_lixi(envelope_id: str) -> int:
-    """
-    Hoàn lại phần chưa phát cho người tạo, rồi XOÁ HẲN record khỏi Firebase
-    (không giữ lại lì xì đã đóng — tránh phình dữ liệu vô ích theo thời gian).
-    """
     ref = _lixi_ref(envelope_id)
     result_holder = {"refund": 0, "creator_id": None, "currency": "mango", "already_closed": False}
 
@@ -549,8 +541,6 @@ def refund_expired_lixi(envelope_id: str) -> int:
         else:
             transaction_mango(creator_id, refund, use_plus=True)
 
-    # Xoá hẳn record khỏi Firebase — không giữ lại lì xì đã đóng.
-    # Nếu đã closed từ trước (race condition với claim_lixi cuối cùng), vẫn xoá bình thường.
     ref.delete()
 
     return refund
@@ -561,7 +551,7 @@ def _log_ref(user_id: int):
 
 def log_purchase(user_id: int, label: str, cost: int, currency: str = "mango") -> None:
     if cost <= 0:
-        return #Không log miễn phí
+        return # Không log miễn phí
 
     ref = _log_ref(user_id)
 
@@ -616,11 +606,10 @@ users/{user_id}/wordle_plays_today: {"date": "2026-07-30", "count": int}   # coo
 wordle_games/{channel_id}: {
     "word": str,                    # từ bí mật, UPPERCASE
     "guesses": [{"user_id": int, "word": str, "result": [str]}],  # lịch sử đoán (tối đa 5)
-    "participants": [int],          # user_id đã từng đoán (không trùng), để chia mango+ an ủi
+    "participants": [int],          # user_id đã từng đoán
     "created_at": iso,
     "finished": bool,
 }
-Mỗi kênh chỉ có TỐI ĐA 1 ván active tại 1 thời điểm.
 """
 
 WORDLE_MAX_GUESSES = 5
@@ -655,7 +644,6 @@ def get_wordle_plays_remaining(user_id: int) -> int:
     return max(0, WORDLE_DAILY_LIMIT - data.get("count", 0))
 
 def consume_wordle_play(user_id: int) -> bool:
-    """Trừ 1 lượt chơi/ngày. Trả về False nếu đã hết lượt hôm nay."""
     today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
     ref = _wordle_play_ref(user_id)
     result_holder = {"ok": False}
@@ -702,13 +690,13 @@ def score_wordle_guess(secret: str, guess: str) -> list[str]:
     result = ["absent"] * 5
     secret_chars = list(secret)
 
-    # Bước 1: đánh dấu đúng vị trí trước (ưu tiên tuyệt đối)
+    # Bước 1: đánh dấu đúng vị trí trước
     for i in range(5):
         if guess[i] == secret[i]:
             result[i] = "correct"
-            secret_chars[i] = None  # đã dùng, không tính lại cho present
+            secret_chars[i] = None  # đã dùng
 
-    # Bước 2: chữ có trong từ nhưng sai vị trí (present) — chỉ tính nếu còn "tồn kho" ký tự
+    # Bước 2: chữ có trong từ nhưng sai vị trí
     for i in range(5):
         if result[i] == "correct":
             continue
@@ -720,7 +708,7 @@ def score_wordle_guess(secret: str, guess: str) -> list[str]:
 
 def submit_wordle_guess(channel_id: int, user_id: int, guess: str) -> dict:
     """
-    Xử lý 1 lượt đoán. Trả về dict:
+    Trả về dict:
     {status: 'no_game'|'invalid'|'win'|'continue'|'lose', result: [...], guesses_left: int, word: str|None}
     """
     ref = _wordle_game_ref(channel_id)

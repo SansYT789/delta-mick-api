@@ -12,7 +12,7 @@ import store
 MAX_CLEAR_AMOUNT = 2000  # trần an toàn
 BOT_OWNER_ID = 985004175110848512  # chủ bot user id
 
-BOT_VERSION = "1.1.0"
+BOT_VERSION = "1.1.1"
 BOT_DESCRIPTION = "Delta Mick Entertainment đa năng các hoạt động lệnh giải trí: kinh tế, mini-game và tiện ích."
 
 # ---------------- /boi-toan ----------------
@@ -226,7 +226,7 @@ class GamesCog(commands.Cog):
         view = HelpView(pages)
         await interaction.followup.send(embed=pages[0], view=view)
 
-    @app_commands.command(name="wordle", description="Đoán từ tiếng Anh 5 chữ cái — cả kênh cùng chơi, gõ thẳng vào chat để đoán")
+    @app_commands.command(name="wordle", description="Đoán từ tiếng Anh 5 chữ cái, gõ thẳng vào chat để đoán")
     async def wordle(self, interaction: discord.Interaction):
         if store.get_active_wordle_game(interaction.channel.id):
             await interaction.response.send_message(
@@ -253,11 +253,10 @@ class GamesCog(commands.Cog):
         embed = discord.Embed(
             title="🔤 Wordle bắt đầu!",
             description=(
-                f"{interaction.user.mention} đã bắt đầu ván Wordle — **AI CŨNG ĐOÁN ĐƯỢC**, "
-                f"chỉ cần gõ 1 từ tiếng Anh **5 chữ cái** thẳng vào kênh này.\n\n"
+                f"{interaction.user.mention} đã bắt đầu ván Wordle"
+                f"Gõ 1 từ tiếng Anh **5 chữ cái** thẳng vào kênh này.\n\n"
                 f"🟩 đúng vị trí · 🟨 có trong từ nhưng sai vị trí · ⬜ không có trong từ\n"
-                f"Cả kênh có chung **{store.WORDLE_MAX_GUESSES} lượt đoán** — ai đoán trúng nhận **{store.WORDLE_WIN_REWARD_MANGO} 🥭**!\n"
-                f"Nếu hết lượt không ai trúng, mỗi người đã tham gia đoán nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+** an ủi."
+                f"Còn lại: **{store.WORDLE_MAX_GUESSES} lượt đoán**"
             ),
             color=discord.Color.blurple(),
         )
@@ -270,15 +269,15 @@ class GamesCog(commands.Cog):
             return
         content = message.content.strip()
         if len(content) != 5 or not content.isalpha() or not content.isascii():
-            return  # chỉ nhận đúng 5 ký tự chữ cái tiếng Anh, bỏ qua mọi tin nhắn khác
+            return
 
         game = store.get_active_wordle_game(message.channel.id)
         if game is None:
-            return  # không có ván active trong kênh này, bỏ qua im lặng
+            return
 
         result = store.submit_wordle_guess(message.channel.id, message.author.id, content)
         if result["status"] == "no_game":
-            return  # race condition hiếm: ván vừa kết thúc ngay trước khi transaction chạy
+            return
 
         emoji_map = {"correct": "🟩", "present": "🟨", "absent": "⬜"}
         row = "".join(emoji_map[r] for r in result["result"])
@@ -295,7 +294,7 @@ class GamesCog(commands.Cog):
             mentions = ", ".join(f"<@{uid}>" for uid in result["participants"])
             await message.reply(
                 f"{row}\n💀 Hết lượt rồi! Từ bí mật là **`{result['word']}`**.\n"
-                f"Cảm ơn {mentions} đã chơi — mỗi người nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+** an ủi.",
+                f"Cảm ơn {mentions} đã chơi — mỗi người nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+**",
             )
         else:
             await message.reply(f"{row}\nCòn **{result['guesses_left']}** lượt đoán.")
@@ -442,12 +441,12 @@ class GamesCog(commands.Cog):
 
         async def _auto_expire():
             await asyncio.sleep(store.LIXI_DURATION_MIN * 60 + 2)
-            store.refund_expired_lixi(envelope_id)  # tự hoàn tiền + xoá hẳn record Firebase
+            store.refund_expired_lixi(envelope_id)
             view.stop()
             try:
-                await interaction.delete_original_response()  # xoá hẳn message Discord, không giữ lại
+                await interaction.delete_original_response()
             except discord.HTTPException:
-                pass  # message có thể đã bị xoá thủ công từ trước, bỏ qua lỗi
+                pass
 
         asyncio.create_task(_auto_expire())
 
@@ -475,7 +474,7 @@ class GamesCog(commands.Cog):
             value=str(sum(g.member_count or 0 for g in self.bot.guilds)),
             inline=True,
         )
-        embed.set_footer(text=f"Chạy trên discord.py {discord.__version__}")
+        embed.set_footer(text=f"Hỗ trợ chính thức tại server Delta Mick")
         if self.bot.user and self.bot.user.avatar:
             embed.set_thumbnail(url=self.bot.user.avatar.url)
         await interaction.response.send_message(embed=embed)
@@ -564,7 +563,12 @@ class GamesCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="rank", description="Xem top 10 người dùng có nhiều mango nhất")
-    async def rank(self, interaction: discord.Interaction):
+    @app_commands.describe(type="Chọn loại mango muốn xem bảng xếp hạng")
+    @app_commands.choices(type=[
+        app_commands.Choice(name="Mango", value="mango"),
+        app_commands.Choice(name="Mango+", value="mango_plus")
+    ])
+    async def rank(self, interaction: discord.Interaction, type: str = "mango"):
         await interaction.response.defer()
 
         users_ref_data = store.get_all_mango_data()
@@ -573,7 +577,10 @@ class GamesCog(commands.Cog):
         for uid_str, udata in users_ref_data.items():
             if not isinstance(udata, dict):
                 continue
-            mango = udata.get("mango")
+            if type == "mango_plus":
+                mango = udata.get("mango_plus")
+            else:
+                mango = udata.get("mango")
             if isinstance(mango, (int, float)) and mango > 0:
                 entries.append((int(uid_str), int(mango)))
 
@@ -593,6 +600,8 @@ class GamesCog(commands.Cog):
                 except (discord.NotFound, discord.HTTPException):
                     user = None
             user_cache[uid] = user
+         
+        currency_txt = "🥭+" if type == "mango_plus" else "🥭"
 
         medal = ["🥇", "🥈", "🥉"]
         lines = []
@@ -602,7 +611,7 @@ class GamesCog(commands.Cog):
             amount_str = f"{amount:,}".replace(",", ".")
 
             rank_icon = medal[i] if i < 3 else f"`#{i + 1}`"
-            lines.append(f"{rank_icon} **{name}** — {amount_str} 🥭")
+            lines.append(f"{rank_icon} **{name}** — {amount_str} {currency_txt}")
 
         user_rank = None
         user_amount = None
@@ -612,17 +621,19 @@ class GamesCog(commands.Cog):
                 user_amount = amount
                 break
 
+        title = "🏆 Bảng xếp hạng Mango+" if type == "mango_plus" else "🏆 Bảng xếp hạng Mango"
+
         embed = discord.Embed(
-            title="🏆 Bảng xếp hạng Top 10 Mango", 
+            title=title, 
             description="\n".join(lines) if lines else "Không có dữ liệu",
             color=discord.Color.gold()
         )
         
         if user_rank is not None and user_amount is not None:
             amount_str = f"{user_amount:,}".replace(",", ".")
-            embed.set_footer(text=f"📍 Hạng của bạn: #{user_rank} • {amount_str} 🥭")
+            embed.set_footer(text=f"📍 Hạng của bạn: #{user_rank} • {amount_str} {currency_txt}")
         else:
-            embed.set_footer(text="Mango được tính chung cho toàn bộ máy chủ.")
+            embed.set_footer(text="Mango được tính chung toàn bộ máy chủ.")
 
         await interaction.followup.send(embed=embed)
 
@@ -827,7 +838,7 @@ class LixiClaimView(discord.ui.View):
 
 
 _COG_DISPLAY_NAMES = {
-    "GamesCog": "🌾 Nông trại, Kinh tế & Tiện ích",
+    "GamesCog": "💵 Kinh tế & Tiện ích",
     "WikiCog": "📖 Tra cứu",
 }
 _COG_ORDER = ["GamesCog", "WikiCog"]
