@@ -226,6 +226,80 @@ class GamesCog(commands.Cog):
         view = HelpView(pages)
         await interaction.followup.send(embed=pages[0], view=view)
 
+    @app_commands.command(name="wordle", description="Đoán từ tiếng Anh 5 chữ cái — cả kênh cùng chơi, gõ thẳng vào chat để đoán")
+    async def wordle(self, interaction: discord.Interaction):
+        if store.get_active_wordle_game(interaction.channel.id):
+            await interaction.response.send_message(
+                "Kênh này đang có ván Wordle chưa kết thúc — gõ 5 chữ cái vào chat để đoán, hoặc đợi ván hiện tại xong.",
+                ephemeral=True,
+            )
+            return
+
+        remaining = store.get_wordle_plays_remaining(interaction.user.id)
+        if remaining <= 0:
+            await interaction.response.send_message(
+                "Bạn đã dùng hết 3 lượt `/wordle` hôm nay, quay lại vào ngày mai nhé.", ephemeral=True
+            )
+            return
+
+        if not store.consume_wordle_play(interaction.user.id):
+            await interaction.response.send_message(
+                "Bạn đã dùng hết 3 lượt `/wordle` hôm nay, quay lại vào ngày mai nhé.", ephemeral=True
+            )
+            return
+
+        store.create_wordle_game(interaction.channel.id)
+
+        embed = discord.Embed(
+            title="🔤 Wordle bắt đầu!",
+            description=(
+                f"{interaction.user.mention} đã bắt đầu ván Wordle — **AI CŨNG ĐOÁN ĐƯỢC**, "
+                f"chỉ cần gõ 1 từ tiếng Anh **5 chữ cái** thẳng vào kênh này.\n\n"
+                f"🟩 đúng vị trí · 🟨 có trong từ nhưng sai vị trí · ⬜ không có trong từ\n"
+                f"Cả kênh có chung **{store.WORDLE_MAX_GUESSES} lượt đoán** — ai đoán trúng nhận **{store.WORDLE_WIN_REWARD_MANGO} 🥭**!\n"
+                f"Nếu hết lượt không ai trúng, mỗi người đã tham gia đoán nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+** an ủi."
+            ),
+            color=discord.Color.blurple(),
+        )
+        embed.set_footer(text=f"Bạn còn {remaining - 1} lượt tạo ván Wordle hôm nay.")
+        await interaction.response.send_message(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author.bot:
+            return
+        content = message.content.strip()
+        if len(content) != 5 or not content.isalpha() or not content.isascii():
+            return  # chỉ nhận đúng 5 ký tự chữ cái tiếng Anh, bỏ qua mọi tin nhắn khác
+
+        game = store.get_active_wordle_game(message.channel.id)
+        if game is None:
+            return  # không có ván active trong kênh này, bỏ qua im lặng
+
+        result = store.submit_wordle_guess(message.channel.id, message.author.id, content)
+        if result["status"] == "no_game":
+            return  # race condition hiếm: ván vừa kết thúc ngay trước khi transaction chạy
+
+        emoji_map = {"correct": "🟩", "present": "🟨", "absent": "⬜"}
+        row = "".join(emoji_map[r] for r in result["result"])
+
+        if result["status"] == "win":
+            store.transaction_mango(message.author.id, store.WORDLE_WIN_REWARD_MANGO)
+            await message.reply(
+                f"{row}\n🎉 **{message.author.mention} đoán trúng: `{result['word']}`!** "
+                f"Nhận **{store.WORDLE_WIN_REWARD_MANGO} 🥭**!",
+            )
+        elif result["status"] == "lose":
+            for uid in result["participants"]:
+                store.transaction_mango(uid, store.WORDLE_PARTICIPATE_REWARD_PLUS, use_plus=True)
+            mentions = ", ".join(f"<@{uid}>" for uid in result["participants"])
+            await message.reply(
+                f"{row}\n💀 Hết lượt rồi! Từ bí mật là **`{result['word']}`**.\n"
+                f"Cảm ơn {mentions} đã chơi — mỗi người nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+** an ủi.",
+            )
+        else:
+            await message.reply(f"{row}\nCòn **{result['guesses_left']}** lượt đoán.")
+
     @app_commands.command(name="mango", description="Xem số mango của bạn hoặc người khác")
     @app_commands.describe(user="Người muốn xem (bỏ trống = xem của bạn)")
     async def mango(self, interaction: discord.Interaction, user: discord.Member | None = None):
@@ -373,7 +447,7 @@ class GamesCog(commands.Cog):
             try:
                 await interaction.delete_original_response()  # xoá hẳn message Discord, không giữ lại
             except discord.HTTPException:
-                pass
+                pass  # message có thể đã bị xoá thủ công từ trước, bỏ qua lỗi
 
         asyncio.create_task(_auto_expire())
 
@@ -753,7 +827,7 @@ class LixiClaimView(discord.ui.View):
 
 
 _COG_DISPLAY_NAMES = {
-    "GamesCog": "💵 Kinh tế & Tiện ích",
+    "GamesCog": "🌾 Nông trại, Kinh tế & Tiện ích",
     "WikiCog": "📖 Tra cứu",
 }
 _COG_ORDER = ["GamesCog", "WikiCog"]
@@ -812,6 +886,7 @@ class HelpView(discord.ui.View):
         self.index = min(len(self.pages) - 1, self.index + 1)
         self._sync_buttons()
         await interaction.response.edit_message(embed=self.pages[self.index], view=self)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(GamesCog(bot))

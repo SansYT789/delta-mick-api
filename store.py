@@ -608,3 +608,159 @@ def unlock_command(command_name: str) -> None:
 
 def is_owner(user_id: int) -> bool:
     return user_id in OWNER_IDS
+
+# ---------------- WORDLE ----------------
+"""
+Schema:
+users/{user_id}/wordle_plays_today: {"date": "2026-07-30", "count": int}   # cooldown 3 lượt/ngày
+wordle_games/{channel_id}: {
+    "word": str,                    # từ bí mật, UPPERCASE
+    "guesses": [{"user_id": int, "word": str, "result": [str]}],  # lịch sử đoán (tối đa 5)
+    "participants": [int],          # user_id đã từng đoán (không trùng), để chia mango+ an ủi
+    "created_at": iso,
+    "finished": bool,
+}
+Mỗi kênh chỉ có TỐI ĐA 1 ván active tại 1 thời điểm.
+"""
+
+WORDLE_MAX_GUESSES = 5
+WORDLE_DAILY_LIMIT = 3
+WORDLE_WIN_REWARD_MANGO = 30
+WORDLE_PARTICIPATE_REWARD_PLUS = 1
+
+WORDLE_WORDS = [
+    "APPLE", "BRAVE", "CHESS", "DANCE", "EAGLE", "FLAME", "GRAPE", "HOUSE", "IMAGE", "JOKER",
+    "KNIFE", "LEMON", "MONEY", "NIGHT", "OCEAN", "PIANO", "QUIET", "RIVER", "STONE", "TIGER",
+    "UNITY", "VOICE", "WATER", "YOUTH", "ZEBRA", "ANGLE", "BLOOM", "CANDY", "DREAM", "EARTH",
+    "FRUIT", "GHOST", "HAPPY", "IVORY", "JELLY", "KARMA", "LIGHT", "MUSIC", "NURSE", "OLIVE",
+    "PEACE", "QUEEN", "ROBOT", "SMILE", "TABLE", "URBAN", "VIRUS", "WORLD", "YIELD", "BROOM",
+    "CLOUD", "DIARY", "EMPTY", "FRESH", "GLASS", "HONEY", "INBOX", "JUDGE", "LASER", "MAGIC",
+    "NOBLE", "ORBIT", "PAPER", "QUICK", "ROUND", "SUGAR", "TEACH", "UNCLE", "VAGUE", "WITCH",
+    "BEACH", "CRAFT", "DELTA", "ELBOW", "FIELD", "GRAND", "HOTEL", "INPUT", "JOINT", "LUNAR",
+    "MANGO", "NOVEL", "OPERA", "PLANT", "QUOTE", "RADIO", "SNAKE", "TREND", "UNITE", "VALID",
+    "RATIO", "PHONK"
+]
+
+def _wordle_play_ref(user_id: int):
+    return db.reference(f"users/{user_id}/wordle_plays_today")
+
+def _wordle_game_ref(channel_id: int):
+    return db.reference(f"wordle_games/{channel_id}")
+
+def get_wordle_plays_remaining(user_id: int) -> int:
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    data = _wordle_play_ref(user_id).get() or {}
+    if data.get("date") != today:
+        return WORDLE_DAILY_LIMIT
+    return max(0, WORDLE_DAILY_LIMIT - data.get("count", 0))
+
+def consume_wordle_play(user_id: int) -> bool:
+    """Trừ 1 lượt chơi/ngày. Trả về False nếu đã hết lượt hôm nay."""
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    ref = _wordle_play_ref(user_id)
+    result_holder = {"ok": False}
+
+    def _txn(current):
+        current = current or {}
+        if current.get("date") != today:
+            current = {"date": today, "count": 0}
+        if current["count"] >= WORDLE_DAILY_LIMIT:
+            result_holder["ok"] = False
+            return current
+        current["count"] += 1
+        result_holder["ok"] = True
+        return current
+
+    ref.transaction(_txn)
+    return result_holder["ok"]
+
+def get_active_wordle_game(channel_id: int) -> dict | None:
+    game = _wordle_game_ref(channel_id).get()
+    if game and not game.get("finished"):
+        return game
+    return None
+
+def create_wordle_game(channel_id: int) -> dict:
+    word = random.choice(WORDLE_WORDS)
+    game = {
+        "word": word,
+        "guesses": [],
+        "participants": [],
+        "created_at": datetime.datetime.utcnow().isoformat(),
+        "finished": False,
+    }
+    _wordle_game_ref(channel_id).set(game)
+    return game
+
+def score_wordle_guess(secret: str, guess: str) -> list[str]:
+    """
+    Trả về list 5 phần tử: 'correct' (🟩 đúng vị trí), 'present' (🟨 có trong từ, sai vị trí),
+    'absent' (⬜ không có trong từ). Xử lý đúng chuẩn Wordle cho chữ cái lặp lại.
+    """
+    secret = secret.upper()
+    guess = guess.upper()
+    result = ["absent"] * 5
+    secret_chars = list(secret)
+
+    # Bước 1: đánh dấu đúng vị trí trước (ưu tiên tuyệt đối)
+    for i in range(5):
+        if guess[i] == secret[i]:
+            result[i] = "correct"
+            secret_chars[i] = None  # đã dùng, không tính lại cho present
+
+    # Bước 2: chữ có trong từ nhưng sai vị trí (present) — chỉ tính nếu còn "tồn kho" ký tự
+    for i in range(5):
+        if result[i] == "correct":
+            continue
+        if guess[i] in secret_chars:
+            result[i] = "present"
+            secret_chars[secret_chars.index(guess[i])] = None
+
+    return result
+
+def submit_wordle_guess(channel_id: int, user_id: int, guess: str) -> dict:
+    """
+    Xử lý 1 lượt đoán. Trả về dict:
+    {status: 'no_game'|'invalid'|'win'|'continue'|'lose', result: [...], guesses_left: int, word: str|None}
+    """
+    ref = _wordle_game_ref(channel_id)
+    result_holder = {"status": "no_game", "result": None, "guesses_left": 0, "word": None, "participants": []}
+
+    def _txn(game):
+        if game is None or game.get("finished"):
+            result_holder["status"] = "no_game"
+            return game
+
+        if len(game.get("guesses", [])) >= WORDLE_MAX_GUESSES:
+            result_holder["status"] = "no_game"
+            return game
+
+        secret = game["word"]
+        score = score_wordle_guess(secret, guess)
+        game.setdefault("guesses", []).append({"user_id": user_id, "word": guess.upper(), "result": score})
+
+        participants = list(game.get("participants", []))
+        if user_id not in participants:
+            participants.append(user_id)
+        game["participants"] = participants
+
+        is_win = all(r == "correct" for r in score)
+        guesses_left = WORDLE_MAX_GUESSES - len(game["guesses"])
+
+        if is_win:
+            game["finished"] = True
+            result_holder["status"] = "win"
+        elif guesses_left <= 0:
+            game["finished"] = True
+            result_holder["status"] = "lose"
+        else:
+            result_holder["status"] = "continue"
+
+        result_holder["result"] = score
+        result_holder["guesses_left"] = guesses_left
+        result_holder["word"] = secret
+        result_holder["participants"] = participants
+        return game
+
+    ref.transaction(_txn)
+    return result_holder
