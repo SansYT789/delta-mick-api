@@ -15,6 +15,7 @@ BOT_OWNER_ID = 985004175110848512  # chủ bot user id
 BOT_VERSION = "1.1.0"
 BOT_DESCRIPTION = "Delta Mick Entertainment đa năng các hoạt động lệnh giải trí: kinh tế, mini-game và tiện ích."
 
+# ---------------- /boi-toan ----------------
 _FORTUNES = [
     {"title": "🏆 Triệu phú tương lai", "desc": "Vận số giàu sang đang chờ, chỉ cần đừng nghỉ việc giữa chừng.", "weight": 3},
     {"title": "🃏 Bậc thầy scam vặt", "desc": "Chuyên gia hứa suông trong nhóm chat, nhưng tim thì lương thiện.", "weight": 8},
@@ -372,7 +373,7 @@ class GamesCog(commands.Cog):
             try:
                 await interaction.delete_original_response()  # xoá hẳn message Discord, không giữ lại
             except discord.HTTPException:
-                pass  # message có thể đã bị xoá thủ công từ trước, bỏ qua lỗi
+                pass
 
         asyncio.create_task(_auto_expire())
 
@@ -599,7 +600,7 @@ class GamesCog(commands.Cog):
 # Work UI
 class CompanyChooseView(discord.ui.View):
     def __init__(self, user_id: int):
-        super().__init__(timeout=60)
+        super().__init__(timeout=300)
         self.user_id = user_id
         self.add_item(CompanyDropdown(user_id))
 
@@ -619,58 +620,73 @@ class CompanyDropdown(discord.ui.Select):
 
         company_id = self.values[0]
 
-        cooldown = store.get_work_cooldown_remaining_sec(self.user_id)
-        if cooldown > 0:
-            await interaction.response.edit_message(
-                content=f"⏱️ Bạn cần chờ **{_fmt_td(cooldown)}** nữa mới đi làm tiếp được.",
-                embed=None, view=None,
-            )
-            return
+        try:
+            cooldown = store.get_work_cooldown_remaining_sec(self.user_id)
+            if cooldown > 0:
+                await interaction.response.edit_message(
+                    content=f"⏱️ Bạn cần chờ **{_fmt_td(cooldown)}** nữa mới đi làm tiếp được.",
+                    embed=None, view=None,
+                )
+                return
 
-        penalty = store.get_company_penalty_remaining_sec(self.user_id, company_id)
-        if penalty > 0:
-            await interaction.response.edit_message(
-                content=f"🚫 Công ty này đang tạm ngừng nhận bạn, còn **{_fmt_td(penalty)}** nữa.",
-                embed=None, view=None,
-            )
-            return
+            penalty = store.get_company_penalty_remaining_sec(self.user_id, company_id)
+            if penalty > 0:
+                await interaction.response.edit_message(
+                    content=f"🚫 Công ty này đang tạm ngừng nhận bạn, còn **{_fmt_td(penalty)}** nữa.",
+                    embed=None, view=None,
+                )
+                return
 
-        await interaction.response.edit_message(content="👔 Đang làm việc...", embed=None, view=None)
-        await asyncio.sleep(3)
+            await interaction.response.edit_message(content="👔 Đang làm việc...", embed=None, view=None)
+            await asyncio.sleep(3)
 
-        result = store.do_work(self.user_id, company_id)
+            result = store.do_work(self.user_id, company_id)
 
-        if not result.get("ok"):
-            await interaction.edit_original_response(content=f"❌ {result.get('message', 'Có lỗi xảy ra.')}")
-            return
+            if not result.get("ok"):
+                await interaction.edit_original_response(content=f"❌ {result.get('message', 'Có lỗi xảy ra.')}")
+                return
 
-        if result["event"]:
+            if result["event"]:
+                embed = discord.Embed(
+                    title=f"⚠️ Sự cố tại {result['company_name']}",
+                    description=result["event"]["text"],
+                    color=discord.Color.dark_red(),
+                )
+                embed.add_field(
+                    name="Hậu quả",
+                    value=f"Không nhận được lương, tạm ngừng làm việc tại công ty này {result['event']['penalty_hours']}h.",
+                    inline=False,
+                )
+                await interaction.edit_original_response(content=None, embed=embed)
+                return
+
+            position_name = store.POSITION_NAMES[result["position_level"]]
             embed = discord.Embed(
-                title=f"⚠️ Sự cố tại {result['company_name']}",
-                description=result["event"]["text"],
-                color=discord.Color.dark_red(),
+                title=f"✅ Hoàn thành công việc tại {result['company_name']}",
+                color=discord.Color.green(),
             )
+            embed.add_field(name="Lương nhận được", value=f"{result['pay']} 🥭", inline=True)
+            embed.add_field(name="Chức vụ", value=position_name, inline=True)
             embed.add_field(
-                name="Hậu quả",
-                value=f"Không nhận được lương, tạm ngừng làm việc tại công ty này {result['event']['penalty_hours']}h.",
-                inline=False,
+                name="Streak",
+                value=f"{result['streak_weeks']} tuần (+{result['streak_weeks'] * store.STREAK_BONUS_PER_WEEK * 100:.0f}% lương)",
+                inline=True,
             )
             await interaction.edit_original_response(content=None, embed=embed)
-            return
-
-        position_name = store.POSITION_NAMES[result["position_level"]]
-        embed = discord.Embed(
-            title=f"✅ Hoàn thành công việc tại {result['company_name']}",
-            color=discord.Color.green(),
-        )
-        embed.add_field(name="Lương nhận được", value=f"{result['pay']} 🥭", inline=True)
-        embed.add_field(name="Chức vụ", value=position_name, inline=True)
-        embed.add_field(
-            name="Streak",
-            value=f"{result['streak_weeks']} tuần (+{result['streak_weeks'] * store.STREAK_BONUS_PER_WEEK * 100:.0f}% lương)",
-            inline=True,
-        )
-        await interaction.edit_original_response(content=None, embed=embed)
+        except discord.HTTPException:
+            pass
+        except Exception:
+            try:
+                if interaction.response.is_done():
+                    await interaction.edit_original_response(
+                        content="❌ Có lỗi xảy ra khi xử lý, vui lòng thử lại `/work`.", embed=None, view=None
+                    )
+                else:
+                    await interaction.response.send_message(
+                        "❌ Có lỗi xảy ra khi xử lý, vui lòng thử lại `/work`.", ephemeral=True
+                    )
+            except discord.HTTPException:
+                pass
 
 # Lixi
 def _build_lixi_embed(envelope_id: str, closed: bool = False, refund: int = 0, currency_label: str = "🥭") -> discord.Embed | None:
@@ -776,7 +792,7 @@ def _build_help_pages(bot: commands.Bot, requester_id: int) -> list[discord.Embe
 
 class HelpView(discord.ui.View):
     def __init__(self, pages: list[discord.Embed]):
-        super().__init__(timeout=200)
+        super().__init__(timeout=300)
         self.pages = pages
         self.index = 0
         self._sync_buttons()
@@ -796,7 +812,6 @@ class HelpView(discord.ui.View):
         self.index = min(len(self.pages) - 1, self.index + 1)
         self._sync_buttons()
         await interaction.response.edit_message(embed=self.pages[self.index], view=self)
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(GamesCog(bot))
