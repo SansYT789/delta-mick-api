@@ -1,3 +1,11 @@
+MANGO_MUSTARD_DAY = {
+    "date": "2026-08-01",  # Ngày diễn ra sự kiện
+    "event_role_id": 1531564795231207424,  # ID role ping
+    "trigger_phrase": "Mango Mustard Day!!",  # Câu để kích hoạt
+    "reward_mango": 367,  # Phần thưởng mango
+    "reward_plus": 36,  # Phần thưởng mango+
+}
+
 COMPANIES = {
     "delta": {
         "name": "Tập đoàn Delta",
@@ -195,5 +203,5 @@ WORDLE_WORDS = [
     "SWING", "THEME", "THIEF", "THINK", "THROW", "TOAST", "TOKEN", "TOWER", "TOWEL", "TOUCH",
     "TRAIN", "TRUCK", "TRUST", "TRUTH", "VALUE", "VIDEO", "VISIT", "WAGON", "WHALE", "WHEEL",
     "WHITE", "WHOLE", "WOMAN", "WOODS", "WORTH", "WRITE", "WRONG", "YOUNG", "ANGER",
-    "STRAY", "SPRAY", "CRONE"
+    "STRAY", "SPRAY", "CRONE", "GRASS", "ETHAN", "HOPES", "RATER"
 ]

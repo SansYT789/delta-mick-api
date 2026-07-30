@@ -305,6 +305,63 @@ class GamesCog(commands.Cog):
         else:
             await message.reply(f"`{content}`\n{row}\nCòn **{result['guesses_left']}** lượt đoán.")
 
+        # ===== Mango Mustard Day Event =====
+        # Kiểm tra sự kiện
+        if store.is_mango_mustard_day():
+            content = message.content.strip()
+            # Kiểm tra câu trigger (không phân biệt hoa thường)
+            if content.upper() == config.MANGO_MUSTARD_DAY["trigger_phrase"].upper():
+                user = message.author
+
+                # Kiểm tra đã nhận thưởng chưa
+                if store.has_claimed_mango_mustard_day(user.id):
+                    await message.reply(
+                        f"🌭 Bạn đã nhận thưởng Mango Mustard Day rồi! Hãy chờ năm sau nhé 🥭",
+                        delete_after=10
+                    )
+                    return
+
+                # Cộng thưởng
+                success = store.claim_mango_mustard_day(user.id)
+                if success:
+                    reward_mango = config.MANGO_MUSTARD_DAY["reward_mango"]
+                    reward_plus = config.MANGO_MUSTARD_DAY["reward_plus"]
+
+                    # Tạo embed thông báo
+                    embed = discord.Embed(
+                        title="🌭 **Mango Mustard Day!!** 🥭",
+                        description=f"🎉 {user.mention} đã tham gia Mango Mustard Day thành công!",
+                        color=discord.Color.gold()
+                    )
+                    embed.add_field(
+                        name="Phần thưởng nhận được",
+                        value=f"**{reward_mango} 🥭** và **{reward_plus} 🥭+**",
+                        inline=True
+                    )
+                    embed.add_field(
+                        name="Ngày sự kiện",
+                        value=f"<t:1785553200:R>",
+                        inline=True
+                    )
+                    embed.set_footer(text="Mango Mustard Day - 1/8/2026")
+
+                    role_id = config.MANGO_MUSTARD_DAY["event_role_id"]
+                    await message.reply(
+                        content=f"<@&{role_id}>",
+                        embed=embed
+                    )
+
+                    try:
+                        role = message.guild.get_role(role_id)
+                        if role and role not in user.roles:
+                            await user.add_roles(role, reason="Mango Mustard Day Participant")
+                    except discord.Forbidden:
+                        pass
+                else:
+                    await message.reply(
+                        "❌ Có lỗi xảy ra khi nhận thưởng, vui lòng thử lại hoặc liên hệ admin.",
+                        delete_after=10)
+
     @app_commands.command(name="wordle-stats", description="Xem thống kê Wordle của bạn")
     async def wordle_stats(self, interaction: discord.Interaction, user: discord.Member | None = None):
         target = user or interaction.user
@@ -335,6 +392,65 @@ class GamesCog(commands.Cog):
         embed.add_field(
             name="Lần chơi cuối",
             value=discord.utils.format_dt(datetime.datetime.fromisoformat(stats.get("last_played", datetime.datetime.utcnow().isoformat())), style="R"), inline=False)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="mango-mustard-day", description="Kiểm tra thông tin sự kiện Mango Mustard Day")
+    async def mango_mustard_day(self, interaction: discord.Interaction):
+        event_date = datetime.datetime.strptime(config.MANGO_MUSTARD_DAY["date"], "%Y-%m-%d")
+        event_date = event_date.replace(tzinfo=datetime.timezone.utc)
+    
+        embed = discord.Embed(
+            title="🌭 Mango Mustard Day 2026 🥭",
+            description="Sự kiện đặc biệt của server!",
+            color=discord.Color.gold()
+        )
+    
+        # Kiểm tra đã diễn ra chưa
+        now = datetime.datetime.utcnow()
+        if now >= event_date:
+            embed.add_field(
+                name="📅 Trạng thái",
+                value="🟢 Sự kiện **đang diễn ra**!",
+                inline=False
+            )
+            embed.add_field(
+                name="🎯 Cách tham gia",
+                value=f"Gõ `{config.MANGO_MUSTARD_DAY['trigger_phrase']}` trong bất kỳ kênh nào để nhận thưởng!",
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="📅 Trạng thái",
+                value=f"⏳ Sự kiện sẽ diễn ra vào <t:{int(event_date.timestamp())}:R>",
+                inline=False
+            )
+    
+        embed.add_field(
+            name="🎁 Phần thưởng",
+            value=f"**{config.MANGO_MUSTARD_DAY['reward_mango']} 🥭** + **{config.MANGO_MUSTARD_DAY['reward_plus']} 🥭+**",
+            inline=True
+        )
+        embed.add_field(
+            name="👤 Yêu cầu",
+            value="Mỗi người chỉ được nhận **1 lần duy nhất**",
+            inline=True
+        )
+    
+        # Kiểm tra user đã nhận chưa
+        if store.has_claimed_mango_mustard_day(interaction.user.id):
+            embed.add_field(
+                name="✅ Trạng thái của bạn",
+                value="Bạn đã nhận thưởng thành công! 🎉",
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="⏳ Trạng thái của bạn",
+                value="Bạn chưa nhận thưởng! Hãy tham gia ngay!",
+                inline=False
+            )
+    
+        embed.set_footer(text=f"ID sự kiện: {int(event_date.timestamp())}")
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="mango", description="Xem số mango của bạn hoặc người khác")

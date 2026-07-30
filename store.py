@@ -624,3 +624,27 @@ def submit_wordle_guess(channel_id: int, user_id: int, guess: str) -> dict:
 
     ref.transaction(_txn)
     return result_holder
+
+# Mango Mustard Day
+def has_claimed_mango_mustard_day(user_id: int) -> bool:
+    ref = db.reference(f"users/{user_id}/mango_mustard_day_claimed")
+    return ref.get() == True
+
+def claim_mango_mustard_day(user_id: int) -> bool:
+    ref = db.reference(f"users/{user_id}/mango_mustard_day_claimed")
+    
+    # Kiểm tra đã claim chưa
+    if ref.get():
+        return False
+    
+    # Cộng thưởng
+    transaction_mango(user_id, config.MANGO_MUSTARD_DAY["reward_mango"])
+    transaction_mango(user_id, config.MANGO_MUSTARD_DAY["reward_plus"], use_plus=True)
+    
+    # Đánh dấu đã claim
+    ref.set(True)
+    return True
+
+def is_mango_mustard_day() -> bool:
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    return today == config.MANGO_MUSTARD_DAY["date"]
