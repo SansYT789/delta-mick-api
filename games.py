@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 
 import store
+import config
 
 MAX_CLEAR_AMOUNT = 2000  # trần an toàn
 BOT_OWNER_ID = 985004175110848512  # chủ bot user id
@@ -15,35 +16,13 @@ BOT_OWNER_ID = 985004175110848512  # chủ bot user id
 BOT_VERSION = "1.1.1"
 BOT_DESCRIPTION = "Delta Mick Entertainment đa năng các hoạt động lệnh giải trí: kinh tế, mini-game và tiện ích."
 
-# ---------------- /boi-toan ----------------
-_FORTUNES = [
-    {"title": "🏆 Triệu phú tương lai", "desc": "Vận số giàu sang đang chờ, chỉ cần đừng nghỉ việc giữa chừng.", "weight": 3},
-    {"title": "🃏 Bậc thầy scam vặt", "desc": "Chuyên gia hứa suông trong nhóm chat, nhưng tim thì lương thiện.", "weight": 8},
-    {"title": "👻 Người vô hình", "desc": "Nhắn tin không ai rep, gọi không ai nghe — nhưng vẫn được yêu quý âm thầm.", "weight": 10},
-    {"title": "🎭 Diễn viên ẩn danh", "desc": "Ngoài đời trầm tính, trong Discord là drama queen chính hiệu.", "weight": 9},
-    {"title": "🐢 Chậm mà chắc", "desc": "Làm gì cũng trễ deadline nhưng chưa bao giờ thất bại hoàn toàn.", "weight": 12},
-    {"title": "🔥 Ngọn lửa cô đơn", "desc": "Cháy hết mình vì đam mê, nhưng hay bị auto AFK giữa trận.", "weight": 9},
-    {"title": "🎰 Con nghiện may rủi", "desc": "Gacha game nào cũng chơi, tỉ lệ ra rare thấp không cản được đam mê.", "weight": 8},
-    {"title": "🧙 Pháp sư mù mờ", "desc": "Nói chuyện sâu sắc nhưng thật ra đang đoán mò 90% thời gian.", "weight": 10},
-    {"title": "👑 Vua/Nữ hoàng không ngai", "desc": "Sinh ra để lãnh đạo, nhưng cái nhóm chat lại không cho quyền admin.", "weight": 5},
-    {"title": "🍜 Đại sư mì gói", "desc": "Nấu ăn cả đời chỉ giỏi món này, nhưng làm cực ngon.", "weight": 11},
-    {"title": "📉 Nhà đầu tư gãy tay", "desc": "Mua đỉnh bán đáy là chuyên môn, nhưng tinh thần luôn lạc quan.", "weight": 7},
-    {"title": "🌙 Cú đêm chính hiệu", "desc": "3 giờ sáng vẫn online, ban ngày ngủ bù không kịp thở.", "weight": 10},
-    {"title": "🎯 Xạ thủ một phát trúng", "desc": "Ít nói nhưng câu nào ra câu đó, chốt hạ cực gọn.", "weight": 6},
-    {"title": "🐌 Tổ trưởng trì hoãn", "desc": "Việc hôm nay để mai làm, nhưng mai làm thì lại xuất sắc.", "weight": 10},
-    {"title": "🎪 Chú hề của nhóm", "desc": "Luôn là người pha trò đầu tiên, nhưng cũng là người an ủi cuối cùng.", "weight": 9},
-    {"title": "🧊 Băng giá bên ngoài", "desc": "Nhìn lạnh lùng khó gần, thân rồi mới biết ấm áp cỡ nào.", "weight": 8},
-    {"title": "🎲 Người được thần may mắn ưu ái", "desc": "Mở loot box nào cũng trúng, đời thực thì chưa chắc.", "weight": 4},
-    {"title": "🌟 Ngôi sao ẩn danh", "desc": "Tài năng thực sự chưa ai phát hiện — hoặc phát hiện rồi mà chưa dám nói.", "weight": 6},
-]
-
 def _roll_fortune(target_user_id: int) -> dict:
     rnd = random.Random(target_user_id)
-    total_weight = sum(f["weight"] for f in _FORTUNES)
+    total_weight = sum(f["weight"] for f in config._FORTUNES)
     pick = rnd.uniform(0, total_weight)
     cumulative = 0
-    chosen = _FORTUNES[-1]
-    for f in _FORTUNES:
+    chosen = config._FORTUNES[-1]
+    for f in config._FORTUNES:
         cumulative += f["weight"]
         if pick <= cumulative:
             chosen = f
@@ -391,7 +370,7 @@ class GamesCog(commands.Cog):
         embed = discord.Embed(
             title="💼 Chọn công ty để làm việc",
             description="\n".join(
-                f"• **{cfg['name']}**" for cfg in store.COMPANIES.values()
+                f"• **{cfg['name']}**" for cfg in config.COMPANIES.values()
             ),
             color=discord.Color.dark_blue(),
         )
@@ -694,7 +673,7 @@ class CompanyDropdown(discord.ui.Select):
         self.user_id = user_id
         options = [
             discord.SelectOption(label=cfg["name"], value=cid)
-            for cid, cfg in store.COMPANIES.items()
+            for cid, cfg in config.COMPANIES.items()
         ]
         super().__init__(placeholder="Chọn công ty...", options=options)
 
@@ -745,7 +724,7 @@ class CompanyDropdown(discord.ui.Select):
                 await interaction.edit_original_response(content=None, embed=embed)
                 return
 
-            position_name = store.POSITION_NAMES[result["position_level"]]
+            position_name = config.POSITION_NAMES[result["position_level"]]
             embed = discord.Embed(
                 title=f"✅ Hoàn thành công việc tại {result['company_name']}",
                 color=discord.Color.green(),
