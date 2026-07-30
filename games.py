@@ -232,7 +232,7 @@ class GamesCog(commands.Cog):
         embed = discord.Embed(
             title="🔤 Wordle bắt đầu!",
             description=(
-                f"{interaction.user.mention} đã bắt đầu ván Wordle"
+                f"{interaction.user.mention} đã bắt đầu ván Wordle\n"
                 f"Gõ 1 từ tiếng Anh **5 chữ cái** thẳng vào kênh này.\n\n"
                 f"🟩 đúng vị trí · 🟨 có trong từ nhưng sai vị trí · ⬜ không có trong từ\n"
                 f"Còn lại: **{store.WORDLE_MAX_GUESSES} lượt đoán**"
@@ -262,11 +262,38 @@ class GamesCog(commands.Cog):
         row = "".join(emoji_map[r] for r in result["result"])
 
         if result["status"] == "win":
+            stats_result = store.update_wordle_stats(message.author.id, True)
             store.transaction_mango(message.author.id, store.WORDLE_WIN_REWARD_MANGO)
-            await message.reply(
-                f"{row}\n🎉 **{message.author.mention} đoán trúng: `{result['word']}`!** "
-                f"Nhận **{store.WORDLE_WIN_REWARD_MANGO} 🥭**!",
-            )
+
+            response = f"{row}\n🎉 **{message.author.mention} đoán trúng: `{result['word']}`!** " \
+                  f"Nhận **{store.WORDLE_WIN_REWARD_MANGO} 🥭**!"
+
+            if stats_result.get("achievement"):
+                role_mappings = store.get_wordle_achievement_roles()
+                if stats_result["achievement"] == "streak":
+                    role_id = role_mappings.get("streak")
+                    if role_id and message.guild:
+                        role = message.guild.get_role(role_id)
+                        if role and role not in message.author.roles:
+                            try:
+                                await message.author.add_roles(role)
+                                response += f"\n🏆 **{message.author.mention} đã đạt chuỗi thắng {store.WORDLE_WIN_STREAK_REQUIRED} ván liên tiếp!**"
+                                response += f"\nPhần thưởng: <@&{role_id}>"
+                            except discord.Forbidden:
+                                pass
+                elif stats_result["achievement"] == "total_wins":
+                    role_id = role_mappings.get("total_wins")
+                    if role_id and message.guild:
+                        role = message.guild.get_role(role_id)
+                        if role and role not in message.author.roles:
+                            try:
+                                await message.author.add_roles(role)
+                                response += f"\n🏆 **{message.author.mention} đã đạt {store.WORDLE_TOTAL_WINS_REQUIRED} lần chiến thắng Wordle!**"
+                                response += f"\nPhần thưởng: <@&{role_id}>"
+                            except discord.Forbidden:
+                                pass
+
+            await message.reply(response)
         elif result["status"] == "lose":
             for uid in result["participants"]:
                 store.transaction_mango(uid, store.WORDLE_PARTICIPATE_REWARD_PLUS, use_plus=True)
@@ -277,6 +304,38 @@ class GamesCog(commands.Cog):
             )
         else:
             await message.reply(f"`{content}`\n{row}\nCòn **{result['guesses_left']}** lượt đoán.")
+
+    @app_commands.command(name="wordle-stats", description="Xem thống kê Wordle của bạn")
+    async def wordle_stats(self, interaction: discord.Interaction, user: discord.Member | None = None):
+        target = user or interaction.user
+        stats = store.get_wordle_stats(target.id)
+    
+        if not stats:
+            await interaction.response.send_message(f"{target.mention} chưa chơi Wordle lần nào.")
+            return
+
+        embed = discord.Embed(
+            title=f"📊 Thống kê Wordle của {target.display_name}",
+            color=discord.Color.blue())
+        embed.add_field(
+            name="Số ván đã chơi",
+            value=stats.get("total_plays", 0), inline=True)
+        embed.add_field(
+            name="Số ván thắng",
+            value=stats.get("total_wins", 0), inline=True)
+        embed.add_field(
+            name="Tỉ lệ thắng",
+            value=f"{stats.get('total_wins', 0) / max(stats.get('total_plays', 1), 1) * 100:.1f}%", inline=True)
+        embed.add_field(
+            name="Chuỗi thắng hiện tại",
+            value=stats.get("current_streak", 0), inline=True)
+        embed.add_field(
+            name="Chuỗi thắng cao nhất",
+            value=stats.get("max_streak", 0), inline=True)
+        embed.add_field(
+            name="Lần chơi cuối",
+            value=discord.utils.format_dt(datetime.datetime.fromisoformat(stats.get("last_played", datetime.datetime.utcnow().isoformat())), style="R"), inline=False)
+        await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="mango", description="Xem số mango của bạn hoặc người khác")
     @app_commands.describe(user="Người muốn xem (bỏ trống = xem của bạn)")

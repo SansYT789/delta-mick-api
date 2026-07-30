@@ -461,11 +461,52 @@ WORDLE_DAILY_LIMIT = 6
 WORDLE_WIN_REWARD_MANGO = 20
 WORDLE_PARTICIPATE_REWARD_PLUS = 1
 
+WORDLE_WIN_STREAK_REQUIRED = 3
+WORDLE_TOTAL_WINS_REQUIRED = 5
+
 def _wordle_play_ref(user_id: int):
     return db.reference(f"users/{user_id}/wordle_plays_today")
 
 def _wordle_game_ref(channel_id: int):
     return db.reference(f"wordle_games/{channel_id}")
+
+def get_wordle_stats(user_id: int) -> dict:
+    ref = db.reference(f"users/{user_id}/wordle_stats")
+    stats = ref.get() or {}
+    return stats
+
+def update_wordle_stats(user_id: int, is_win: bool) -> dict:
+    ref = db.reference(f"users/{user_id}/wordle_stats")
+    result = {"achievement": None}
+    
+    def _txn(current):
+        current = current or {}
+        current["total_plays"] = current.get("total_plays", 0) + 1
+        
+        if is_win:
+            current["total_wins"] = current.get("total_wins", 0) + 1
+            current["current_streak"] = current.get("current_streak", 0) + 1
+            current["max_streak"] = max(current.get("max_streak", 0), current["current_streak"])
+            
+            # check
+            if current["current_streak"] >= WORDLE_WIN_STREAK_REQUIRED:
+                result["achievement"] = "streak"
+            elif current["total_wins"] == WORDLE_TOTAL_WINS_REQUIRED:
+                result["achievement"] = "total_wins"
+        else:
+            current["current_streak"] = 0
+        
+        current["last_played"] = datetime.datetime.utcnow().isoformat()
+        return current
+    
+    ref.transaction(_txn)
+    return result
+
+def get_wordle_achievement_roles() -> dict:
+    return {
+        "streak": 1532390640866820256,
+        "total_wins": 1532390640866820256,
+    }
 
 def get_wordle_plays_remaining(user_id: int) -> int:
     today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
