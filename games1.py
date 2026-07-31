@@ -5,19 +5,16 @@ import logging
 from discord import app_commands
 from discord.ext import commands
 from typing import Optional, Tuple
-from functools import lru_cache
 import urllib.parse
 
 logger = logging.getLogger('wiki_cog')
 WIKI_LANGS_TRY_ORDER = ["vi", "en"]
 REQUEST_TIMEOUT_SEC = 8
-MAX_RETRIES = 2
 
-# Wikipedia API yêu cầu User-Agent hợp lệ theo chính sách chống lạm dụng
-# (https://meta.wikimedia.org/wiki/User-Agent_policy) — thiếu header này khiến
-# request bị từ chối/giới hạn âm thầm, đây là nguyên nhân /wiki không tìm được gì.
 HEADERS = {
-    "User-Agent": "DeltaMickBot/1.0 (Discord bot; contact via server owner)"
+    "User-Agent": "DeltaMickBot/1.0 (Discord bot; contact: killerdustsans307@gmail.com)",
+    "Accept": "application/json",
+    "Accept-Encoding": "gzip"
 }
 
 class WikiCog(commands.Cog):
@@ -43,10 +40,6 @@ class WikiCog(commands.Cog):
     async def _wiki_search_title(self, session: aiohttp.ClientSession, lang: str, query: str) -> Optional[str]:
         url = f"https://{lang}.wikipedia.org/w/api.php"
 
-        # CHIẾN LƯỢC CHÍNH: full-text search (srwhat=text) — đây là cách tìm kiếm thông thường,
-        # khớp được với query tự nhiên như "thuyết internet chết" ra bài "Thuyết Internet chết".
-        # (srwhat=nearmatch trước đây quá nghiêm ngặt, chỉ khớp khi gần như TRÙNG TUYỆT ĐỐI
-        # tiêu đề bài viết, nên hầu như luôn thất bại với cách người dùng gõ tự nhiên.)
         params_fulltext = {
             "action": "query",
             "list": "search",
@@ -57,7 +50,7 @@ class WikiCog(commands.Cog):
         }
 
         try:
-            async with session.get(url, params=params_fulltext, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+            async with session.get(url, params=params_fulltext, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     results = data.get("query", {}).get("search", [])
@@ -67,7 +60,6 @@ class WikiCog(commands.Cog):
         except Exception as e:
             logger.warning(f"Full-text search error: {e}")
 
-        # Fallback 1: nearmatch — vẫn hữu ích khi query CHÍNH XÁC là tên bài viết (nhanh hơn).
         params_nearmatch = {
             "action": "query",
             "list": "search",
@@ -78,7 +70,7 @@ class WikiCog(commands.Cog):
         }
 
         try:
-            async with session.get(url, params=params_nearmatch, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+            async with session.get(url, params=params_nearmatch, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     results = data.get("query", {}).get("search", [])
@@ -97,7 +89,7 @@ class WikiCog(commands.Cog):
         }
 
         try:
-            async with session.get(url, params=params_prefix, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+            async with session.get(url, params=params_prefix, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     results = data.get("query", {}).get("prefixsearch", [])
@@ -118,12 +110,12 @@ class WikiCog(commands.Cog):
         }
 
         try:
-            async with session.get(url, params=params_opensearch, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+            async with session.get(url, params=params_opensearch, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if len(data) > 1 and data[1]:
                         logger.info(f"✅ Opensearch found: {data[1][0]}")
-                        return data[1][0]  # Trả về title gợi ý đầu tiên
+                        return data[1][0]
                     else:
                         logger.info(f"⚠️ Opensearch no suggestions for '{query}'")
         except Exception as e:
@@ -134,13 +126,13 @@ class WikiCog(commands.Cog):
     
     async def _wiki_get_summary(self, session: aiohttp.ClientSession, lang: str, title: str) -> Optional[dict]:
         title_variants = [
-            title,                          # Original
-            title.replace(" ", "_"),        # Replace spaces
-            title.title(),                  # Title case
-            title.lower(),                  # Lowercase
-            title.capitalize(),             # Capitalize first letter
-            title.replace(" ", "_").title(), # Title with underscores
-            title.upper(),                  # UPPERCASE
+            title,
+            title.replace(" ", "_"),
+            title.title(),
+            title.lower(),
+            title.capitalize(),
+            title.replace(" ", "_").title(),
+            title.upper(),
         ]
 
         unique_titles = []
@@ -153,7 +145,7 @@ class WikiCog(commands.Cog):
             url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{encoded_title}"
 
             try:
-                async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         if data.get("type") != "disambiguation":
@@ -171,13 +163,11 @@ class WikiCog(commands.Cog):
         if len(extract) <= max_length:
             return extract
         
-        # Cut at sentence boundaries
         for separator in ['. ', '? ', '! ', '\n', ', ']:
             truncated = extract[:max_length].rsplit(separator, 1)[0]
             if truncated and len(truncated) > max_length * 0.6:
                 return truncated + '...'
         
-        # Fallback: cut at space
         truncated = extract[:max_length].rsplit(' ', 1)[0]
         return truncated + '...' if truncated else extract[:max_length] + '...'
     
@@ -187,7 +177,7 @@ class WikiCog(commands.Cog):
         if cached:
             return cached
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(headers=HEADERS) as session:
             for lang in WIKI_LANGS_TRY_ORDER:
                 logger.info(f"🔍 Trying {lang} Wikipedia for: {query}")
 
@@ -216,7 +206,6 @@ class WikiCog(commands.Cog):
         full="Hiển thị nội dung đầy đủ thay vì tóm tắt"
     )
     async def wiki(self, interaction: discord.Interaction, query: str, full: bool = False):
-        # Validate query
         if len(query.strip()) < 2:
             await interaction.response.send_message(
                 "❌ Từ khoá tìm kiếm quá ngắn (cần ít nhất 2 ký tự).",

@@ -160,13 +160,14 @@ def get_company_penalty_remaining_sec(user_id: int, company_id: str) -> int:
 
 def _update_work_data(user_id: int, fn):
     ref = db.reference(f"users/{user_id}")
-
+    
     def _txn(current):
         current = current or {}
         current.setdefault("work", dict(DEFAULT_WORK_DATA))
         return fn(current)
-
-    return ref.transaction(_txn)
+    
+    result = ref.transaction(_txn)
+    return result['data']
 
 def do_work(user_id: int, company_id: str) -> dict:
     if company_id not in config.config.COMPANIES:
@@ -232,7 +233,7 @@ def do_work(user_id: int, company_id: str) -> dict:
     lo, hi = config.COMPANIES[company_id]["base_pay"]
     base_pay = random.randint(lo, hi)
     streak_mult = 1.0 + streak_weeks * STREAK_BONUS_PER_WEEK
-    position_mult = 1.0 + config.POSITION_BUFFS[min(position_level, len(config.POSITION_BUFFS) - 1.0)]
+    position_mult = 1.0 + config.POSITION_BUFFS[min(position_level, len(config.POSITION_BUFFS) - 1)]
     pay = max(1, round(base_pay * streak_mult * position_mult))
 
     def _apply(d):
