@@ -160,14 +160,13 @@ def get_company_penalty_remaining_sec(user_id: int, company_id: str) -> int:
 
 def _update_work_data(user_id: int, fn):
     ref = db.reference(f"users/{user_id}")
-    
+
     def _txn(current):
         current = current or {}
         current.setdefault("work", dict(DEFAULT_WORK_DATA))
         return fn(current)
-    
-    result = ref.transaction(_txn)
-    return result['data']
+
+    return ref.transaction(_txn)
 
 def do_work(user_id: int, company_id: str) -> dict:
     if company_id not in config.config.COMPANIES:
@@ -468,8 +467,8 @@ WORDLE_TOTAL_WINS_REQUIRED = 5
 def _wordle_play_ref(user_id: int):
     return db.reference(f"users/{user_id}/wordle_plays_today")
 
-def _wordle_game_ref(channel_id: int):
-    return db.reference(f"wordle_games/{channel_id}")
+def _wordle_game_ref(user_id: int):
+    return db.reference(f"wordle_games/{user_id}")
 
 def get_wordle_stats(user_id: int) -> dict:
     ref = db.reference(f"users/{user_id}/wordle_stats")
@@ -535,23 +534,25 @@ def consume_wordle_play(user_id: int) -> bool:
     ref.transaction(_txn)
     return result_holder["ok"]
 
-def get_active_wordle_game(channel_id: int) -> dict | None:
-    game = _wordle_game_ref(channel_id).get()
+def get_active_wordle_game(user_id: int) -> dict | None:
+    game = _wordle_game_ref(user_id).get()
     if game and not game.get("finished"):
         return game
     return None
 
-def create_wordle_game(channel_id: int) -> dict:
+def create_wordle_game(user_id: int) -> dict:
     word = random.choice(config.WORDLE_WORDS)
     game = {
         "word": word,
         "guesses": [],
-        "participants": [],
         "created_at": datetime.datetime.utcnow().isoformat(),
         "finished": False,
     }
-    _wordle_game_ref(channel_id).set(game)
+    _wordle_game_ref(user_id).set(game)
     return game
+
+def delete_wordle_game(user_id: int) -> None:
+    _wordle_game_ref(user_id).delete()
 
 def score_wordle_guess(secret: str, guess: str) -> list[str]:
     """
@@ -579,13 +580,13 @@ def score_wordle_guess(secret: str, guess: str) -> list[str]:
 
     return result
 
-def submit_wordle_guess(channel_id: int, user_id: int, guess: str) -> dict:
+def submit_wordle_guess(user_id: int, guess: str) -> dict:
     """
     Trả về dict:
-    {status: 'no_game'|'invalid'|'win'|'continue'|'lose', result: [...], guesses_left: int, word: str|None}
+    {status: 'no_game'|'win'|'continue'|'lose', result: [...], guesses_left: int, word: str|None}
     """
-    ref = _wordle_game_ref(channel_id)
-    result_holder = {"status": "no_game", "result": None, "guesses_left": 0, "word": None, "participants": []}
+    ref = _wordle_game_ref(user_id)
+    result_holder = {"status": "no_game", "result": None, "guesses_left": 0, "word": None}
 
     def _txn(game):
         if game is None or game.get("finished"):
@@ -598,12 +599,7 @@ def submit_wordle_guess(channel_id: int, user_id: int, guess: str) -> dict:
 
         secret = game["word"]
         score = score_wordle_guess(secret, guess)
-        game.setdefault("guesses", []).append({"user_id": user_id, "word": guess.upper(), "result": score})
-
-        participants = list(game.get("participants", []))
-        if user_id not in participants:
-            participants.append(user_id)
-        game["participants"] = participants
+        game.setdefault("guesses", []).append({"word": guess.upper(), "result": score})
 
         is_win = all(r == "correct" for r in score)
         guesses_left = WORDLE_MAX_GUESSES - len(game["guesses"])
@@ -620,7 +616,6 @@ def submit_wordle_guess(channel_id: int, user_id: int, guess: str) -> dict:
         result_holder["result"] = score
         result_holder["guesses_left"] = guesses_left
         result_holder["word"] = secret
-        result_holder["participants"] = participants
         return game
 
     ref.transaction(_txn)
@@ -652,7 +647,6 @@ def is_mango_mustard_day() -> bool:
 
 # ===== Meme Achievement =====
 def get_meme_count(user_id: int) -> int:
-    """Lấy số lượng meme đã gửi của user"""
     try:
         ref = db.reference(f"users/{user_id}/meme_count")
         return ref.get() or 0
@@ -660,7 +654,6 @@ def get_meme_count(user_id: int) -> int:
         return 0
 
 def increment_meme_count(user_id: int) -> int:
-    """Tăng số lượng meme và trả về số mới"""
     try:
         ref = db.reference(f"users/{user_id}/meme_count")
         current = ref.get() or 0
@@ -676,7 +669,6 @@ def increment_meme_count(user_id: int) -> int:
         return 0
 
 def has_meme_role(user_id: int, guild_id: int) -> bool:
-    """Kiểm tra user đã có role meme chưa (qua database)"""
     try:
         ref = db.reference(f"users/{user_id}/meme_role_claimed")
         return ref.get() == True
@@ -684,7 +676,6 @@ def has_meme_role(user_id: int, guild_id: int) -> bool:
         return False
 
 def claim_meme_role(user_id: int) -> bool:
-    """Đánh dấu user đã nhận role meme"""
     try:
         ref = db.reference(f"users/{user_id}/meme_role_claimed")
         if ref.get() == True:
@@ -695,12 +686,10 @@ def claim_meme_role(user_id: int) -> bool:
         return False
 
 def reset_meme_count_for_user(user_id: int) -> None:
-    """Reset số lượng meme và trạng thái role đã nhận của 1 user cụ thể."""
     db.reference(f"users/{user_id}/meme_count").set(0)
     db.reference(f"users/{user_id}/meme_role_claimed").set(False)
 
 def reset_meme_counts():
-    """Reset số lượng meme của TOÀN BỘ user (dùng cho maintenance)."""
     try:
         users = db.reference("users").get() or {}
         for uid in users:

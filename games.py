@@ -205,11 +205,11 @@ class GamesCog(commands.Cog):
         view = HelpView(pages)
         await interaction.followup.send(embed=pages[0], view=view)
 
-    @app_commands.command(name="wordle", description="Đoán từ tiếng Anh 5 chữ cái, gõ thẳng vào chat để đoán")
+    @app_commands.command(name="wordle", description="Đoán từ tiếng Anh 5 chữ cái qua modal")
     async def wordle(self, interaction: discord.Interaction):
-        if store.get_active_wordle_game(interaction.channel.id):
+        if store.get_active_wordle_game(interaction.user.id):
             await interaction.response.send_message(
-                "Kênh này đang có ván Wordle chưa kết thúc — gõ 5 chữ cái vào chat để đoán, hoặc đợi ván hiện tại xong.",
+                "Bạn đang có ván Wordle chưa kết thúc — bấm nút **Đoán từ** trên tin nhắn cũ, hoặc **Kết thúc** để huỷ ván.",
                 ephemeral=True,
             )
             return
@@ -217,30 +217,24 @@ class GamesCog(commands.Cog):
         remaining = store.get_wordle_plays_remaining(interaction.user.id)
         if remaining <= 0:
             await interaction.response.send_message(
-                "Bạn đã dùng hết 3 lượt `/wordle` hôm nay, quay lại vào ngày mai nhé.", ephemeral=True
+                f"Bạn đã dùng hết {store.WORDLE_DAILY_LIMIT} lượt `/wordle` hôm nay, quay lại vào ngày mai nhé.",
+                ephemeral=True,
             )
             return
 
         if not store.consume_wordle_play(interaction.user.id):
             await interaction.response.send_message(
-                "Bạn đã dùng hết 3 lượt `/wordle` hôm nay, quay lại vào ngày mai nhé.", ephemeral=True
+                f"Bạn đã dùng hết {store.WORDLE_DAILY_LIMIT} lượt `/wordle` hôm nay, quay lại vào ngày mai nhé.",
+                ephemeral=True,
             )
             return
 
-        store.create_wordle_game(interaction.channel.id)
+        store.create_wordle_game(interaction.user.id)
 
-        embed = discord.Embed(
-            title="🔤 Wordle bắt đầu!",
-            description=(
-                f"{interaction.user.mention} đã bắt đầu ván Wordle\n"
-                f"Gõ 1 từ tiếng Anh **5 chữ cái** thẳng vào kênh này.\n\n"
-                f"🟩 đúng vị trí · 🟨 có trong từ nhưng sai vị trí · ⬜ không có trong từ\n"
-                f"Còn lại: **{store.WORDLE_MAX_GUESSES} lượt đoán**"
-            ),
-            color=discord.Color.blurple(),
-        )
+        embed = _build_wordle_embed(interaction.user, [], store.WORDLE_MAX_GUESSES)
         embed.set_footer(text=f"Bạn còn {remaining - 1} lượt tạo ván Wordle hôm nay.")
-        await interaction.response.send_message(embed=embed)
+        view = WordleView(interaction.user.id)
+        await interaction.response.send_message(embed=embed, view=view)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -248,60 +242,6 @@ class GamesCog(commands.Cog):
             return
 
         content = message.content.strip()
-
-        # ===== WORDLE ===== (chỉ xử lý nếu đúng 5 ký tự chữ cái, KHÔNG return khỏi toàn hàm
-        # để nhánh Mango Mustard Day bên dưới vẫn luôn được kiểm tra độc lập)
-        if len(content) == 5 and content.isalpha() and content.isascii():
-            game = store.get_active_wordle_game(message.channel.id)
-            if game is not None:
-                result = store.submit_wordle_guess(message.channel.id, message.author.id, content)
-                if result["status"] != "no_game":
-                    emoji_map = {"correct": "🟩", "present": "🟨", "absent": "⬜"}
-                    row = "".join(emoji_map[r] for r in result["result"])
-
-                    if result["status"] == "win":
-                        stats_result = store.update_wordle_stats(message.author.id, True)
-                        store.transaction_mango(message.author.id, store.WORDLE_WIN_REWARD_MANGO)
-
-                        response = f"{row}\n🎉 **{message.author.mention} đoán trúng: `{result['word']}`!** " \
-                              f"Nhận **{store.WORDLE_WIN_REWARD_MANGO} 🥭**!"
-
-                        if stats_result.get("achievement"):
-                            role_mappings = store.get_wordle_achievement_roles()
-                            if stats_result["achievement"] == "streak":
-                                role_id = role_mappings.get("streak")
-                                if role_id and message.guild:
-                                    role = message.guild.get_role(role_id)
-                                    if role and role not in message.author.roles:
-                                        try:
-                                            await message.author.add_roles(role)
-                                            response += f"\n🏆 **{message.author.mention} đã đạt chuỗi thắng {store.WORDLE_WIN_STREAK_REQUIRED} ván liên tiếp!**"
-                                            response += f"\nPhần thưởng: <@&{role_id}>"
-                                        except discord.Forbidden:
-                                            pass
-                            elif stats_result["achievement"] == "total_wins":
-                                role_id = role_mappings.get("total_wins")
-                                if role_id and message.guild:
-                                    role = message.guild.get_role(role_id)
-                                    if role and role not in message.author.roles:
-                                        try:
-                                            await message.author.add_roles(role)
-                                            response += f"\n🏆 **{message.author.mention} đã đạt {store.WORDLE_TOTAL_WINS_REQUIRED} lần chiến thắng Wordle!**"
-                                            response += f"\nPhần thưởng: <@&{role_id}>"
-                                        except discord.Forbidden:
-                                            pass
-
-                        await message.reply(response)
-                    elif result["status"] == "lose":
-                        for uid in result["participants"]:
-                            store.transaction_mango(uid, store.WORDLE_PARTICIPATE_REWARD_PLUS, use_plus=True)
-                        mentions = ", ".join(f"<@{uid}>" for uid in result["participants"])
-                        await message.reply(
-                            f"{row}\n💀 Hết lượt rồi! Từ bí mật là **`{result['word']}`**.\n"
-                            f"Cảm ơn {mentions} đã chơi — mỗi người nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+**",
-                        )
-                    else:
-                        await message.reply(f"`{content}`\n{row}\nCòn **{result['guesses_left']}** lượt đoán.")
 
         # ===== MEME ACHIEVEMENT ===== (độc lập với Wordle — luôn kiểm tra, không bị chặn)
         if message.channel.id == config.MEME_CONFIG["channel_id"]:
@@ -1128,6 +1068,146 @@ class HelpView(discord.ui.View):
         self.index = min(len(self.pages) - 1, self.index + 1)
         self._sync_buttons()
         await interaction.response.edit_message(embed=self.pages[self.index], view=self)
+
+
+# ==================== WORDLE (1 user/ván, đoán qua modal) ====================
+def _build_wordle_embed(user, guesses: list[dict], guesses_left: int, finished_text: str | None = None) -> discord.Embed:
+    lines = []
+    emoji_map = {"correct": "🟩", "present": "🟨", "absent": "⬜"}
+    for g in guesses:
+        row = "".join(emoji_map[r] for r in g["result"])
+        lines.append(f"`{g['word']}`  {row}")
+
+    description = "\n".join(lines) if lines else "_Chưa có lượt đoán nào._"
+    description += f"\n\nCòn lại: **{guesses_left}** lượt đoán."
+    if finished_text:
+        description += f"\n\n{finished_text}"
+
+    embed = discord.Embed(
+        title=f"🔤 Wordle — {user.display_name}",
+        description=description,
+        color=discord.Color.blurple() if not finished_text else discord.Color.dark_grey(),
+    )
+    return embed
+
+
+class WordleView(discord.ui.View):
+    def __init__(self, owner_id: int):
+        super().__init__(timeout=None)
+        self.owner_id = owner_id
+        self.guess_button.custom_id = f"wordle:guess:{owner_id}"
+        self.end_button.custom_id = f"wordle:end:{owner_id}"
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Đây không phải ván Wordle của bạn.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="🔤 Đoán từ", style=discord.ButtonStyle.primary, custom_id="wordle:guess:template")
+    async def guess_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        game = store.get_active_wordle_game(self.owner_id)
+        if game is None:
+            await interaction.response.send_message("Ván này đã kết thúc rồi.", ephemeral=True)
+            return
+        await interaction.response.send_modal(WordleGuessModal(self.owner_id))
+
+    @discord.ui.button(label="🛑 Kết thúc", style=discord.ButtonStyle.danger, custom_id="wordle:end:template")
+    async def end_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        game = store.get_active_wordle_game(self.owner_id)
+        word_text = f"\n\nTừ bí mật là **`{game['word']}`**." if game else ""
+        store.delete_wordle_game(self.owner_id)
+
+        for item in self.children:
+            item.disabled = True
+        embed = discord.Embed(
+            title="🛑 Đã kết thúc ván Wordle",
+            description=f"Tin nhắn này sẽ tự xoá sau 15 giây.{word_text}",
+            color=discord.Color.dark_grey(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        async def _auto_delete():
+            await asyncio.sleep(15)
+            try:
+                await interaction.delete_original_response()
+            except discord.HTTPException:
+                pass
+        asyncio.create_task(_auto_delete())
+
+
+class WordleGuessModal(discord.ui.Modal, title="Đoán từ Wordle"):
+    guess_input = discord.ui.TextInput(
+        label="Từ 5 chữ cái (tiếng Anh)",
+        placeholder="Ví dụ: APPLE",
+        min_length=5,
+        max_length=5,
+    )
+
+    def __init__(self, owner_id: int):
+        super().__init__()
+        self.owner_id = owner_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guess = self.guess_input.value.strip()
+        if not guess.isalpha() or not guess.isascii():
+            await interaction.response.send_message("Chỉ được nhập chữ cái tiếng Anh (A-Z), thử lại nhé.", ephemeral=True)
+            return
+
+        result = store.submit_wordle_guess(self.owner_id, guess)
+        if result["status"] == "no_game":
+            await interaction.response.send_message("Ván này đã kết thúc rồi.", ephemeral=True)
+            return
+
+        user = interaction.user
+        game = store.get_active_wordle_game(self.owner_id) or {"guesses": []}
+
+        if result["status"] == "win":
+            stats_result = store.update_wordle_stats(self.owner_id, True)
+            store.transaction_mango(self.owner_id, store.WORDLE_WIN_REWARD_MANGO)
+
+            finished_text = f"🎉 **Chính xác!** Bạn nhận **{store.WORDLE_WIN_REWARD_MANGO} 🥭**!"
+
+            if stats_result.get("achievement"):
+                role_mappings = store.get_wordle_achievement_roles()
+                role_key = stats_result["achievement"]
+                role_id = role_mappings.get(role_key)
+                if role_id and interaction.guild:
+                    role = interaction.guild.get_role(role_id)
+                    if role and role not in user.roles:
+                        try:
+                            await user.add_roles(role)
+                            finished_text += f"\n🏆 Đạt thành tích mới! Nhận role <@&{role_id}>"
+                        except discord.Forbidden:
+                            pass
+
+            # win -> ván đã tự finished=True trong Firebase, xoá luôn record cho gọn
+            store.delete_wordle_game(self.owner_id)
+
+            embed = _build_wordle_embed(user, [
+                {"word": g["word"], "result": g["result"]}
+                for g in (game.get("guesses") if isinstance(game, dict) else [])
+            ] or [{"word": guess.upper(), "result": result["result"]}], 0, finished_text)
+
+            view = WordleView(self.owner_id)
+            for item in view.children:
+                item.disabled = True
+            await interaction.response.edit_message(embed=embed, view=view)
+
+        elif result["status"] == "lose":
+            store.transaction_mango(self.owner_id, store.WORDLE_PARTICIPATE_REWARD_PLUS, use_plus=True)
+            finished_text = f"💀 Hết lượt! Từ bí mật là **`{result['word']}`**.\nBạn nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+** an ủi."
+            store.delete_wordle_game(self.owner_id)
+
+            embed = _build_wordle_embed(user, game.get("guesses", []) if isinstance(game, dict) else [], 0, finished_text)
+            view = WordleView(self.owner_id)
+            for item in view.children:
+                item.disabled = True
+            await interaction.response.edit_message(embed=embed, view=view)
+
+        else:
+            embed = _build_wordle_embed(user, game.get("guesses", []) if isinstance(game, dict) else [], result["guesses_left"])
+            await interaction.response.edit_message(embed=embed)
 
 
 async def setup(bot: commands.Bot):
