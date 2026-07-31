@@ -13,7 +13,7 @@ import config
 MAX_CLEAR_AMOUNT = 2000  # trần an toàn
 BOT_OWNER_ID = 985004175110848512  # chủ bot user id
 
-BOT_VERSION = "1.1.1"
+BOT_VERSION = "1.1.3"
 BOT_DESCRIPTION = "Delta Mick Entertainment đa năng các hoạt động lệnh giải trí: kinh tế, mini-game và tiện ích."
 
 def _roll_fortune(target_user_id: int) -> dict:
@@ -243,7 +243,7 @@ class GamesCog(commands.Cog):
 
         content = message.content.strip()
 
-        # ===== MEME ACHIEVEMENT ===== (độc lập với Wordle — luôn kiểm tra, không bị chặn)
+        # Meme
         if message.channel.id == config.MEME_CONFIG["channel_id"]:
             content_lower = message.content.lower()
             has_link = any(kw in content_lower for kw in (
@@ -276,9 +276,7 @@ class GamesCog(commands.Cog):
                         except discord.HTTPException as e:
                             print(f"Lỗi khi thêm role: {e}")
 
-        # ===== MANGO MUSTARD DAY EVENT ===== (độc lập hoàn toàn — luôn kiểm tra mỗi tin nhắn,
-        # KHÔNG bị chặn bởi nhánh Wordle ở trên nữa — đây chính là fix bug "hiện ứng dụng không phản hồi"
-        # thực chất là do logic này trước đây nằm SAU 1 early-return của Wordle nên không bao giờ chạy tới)
+        # Mango Mustard Day
         if store.is_mango_mustard_day():
             if content.upper() == config.MANGO_MUSTARD_DAY["trigger_phrase"].upper():
                 user = message.author
@@ -1007,7 +1005,6 @@ class LixiClaimView(discord.ui.View):
             except discord.HTTPException:
                 pass
 
-
 _COG_DISPLAY_NAMES = {
     "GamesCog": "💵 Kinh tế & Tiện ích",
     "WikiCog": "📖 Tra cứu",
@@ -1069,8 +1066,7 @@ class HelpView(discord.ui.View):
         self._sync_buttons()
         await interaction.response.edit_message(embed=self.pages[self.index], view=self)
 
-
-# ==================== WORDLE (1 user/ván, đoán qua modal) ====================
+# Wordle
 def _build_wordle_embed(user, guesses: list[dict], guesses_left: int, finished_text: str | None = None) -> discord.Embed:
     lines = []
     emoji_map = {"correct": "🟩", "present": "🟨", "absent": "⬜"}
@@ -1089,7 +1085,6 @@ def _build_wordle_embed(user, guesses: list[dict], guesses_left: int, finished_t
         color=discord.Color.blurple() if not finished_text else discord.Color.dark_grey(),
     )
     return embed
-
 
 class WordleView(discord.ui.View):
     def __init__(self, owner_id: int):
@@ -1135,10 +1130,9 @@ class WordleView(discord.ui.View):
                 pass
         asyncio.create_task(_auto_delete())
 
-
 class WordleGuessModal(discord.ui.Modal, title="Đoán từ Wordle"):
     guess_input = discord.ui.TextInput(
-        label="Từ 5 chữ cái (tiếng Anh)",
+        label="Từ 5 chữ cái",
         placeholder="Ví dụ: APPLE",
         min_length=5,
         max_length=5,
@@ -1151,7 +1145,7 @@ class WordleGuessModal(discord.ui.Modal, title="Đoán từ Wordle"):
     async def on_submit(self, interaction: discord.Interaction):
         guess = self.guess_input.value.strip()
         if not guess.isalpha() or not guess.isascii():
-            await interaction.response.send_message("Chỉ được nhập chữ cái tiếng Anh (A-Z), thử lại nhé.", ephemeral=True)
+            await interaction.response.send_message("Chỉ được nhập chữ cái tiếng Anh (A-Z), thử lại.", ephemeral=True)
             return
 
         result = store.submit_wordle_guess(self.owner_id, guess)
@@ -1181,7 +1175,7 @@ class WordleGuessModal(discord.ui.Modal, title="Đoán từ Wordle"):
                         except discord.Forbidden:
                             pass
 
-            # win -> ván đã tự finished=True trong Firebase, xoá luôn record cho gọn
+            # win
             store.delete_wordle_game(self.owner_id)
 
             embed = _build_wordle_embed(user, [
@@ -1196,7 +1190,7 @@ class WordleGuessModal(discord.ui.Modal, title="Đoán từ Wordle"):
 
         elif result["status"] == "lose":
             store.transaction_mango(self.owner_id, store.WORDLE_PARTICIPATE_REWARD_PLUS, use_plus=True)
-            finished_text = f"💀 Hết lượt! Từ bí mật là **`{result['word']}`**.\nBạn nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+** an ủi."
+            finished_text = f"💀 Hết lượt! Từ bí mật là **`{result['word']}`**.\nBạn nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+**."
             store.delete_wordle_game(self.owner_id)
 
             embed = _build_wordle_embed(user, game.get("guesses", []) if isinstance(game, dict) else [], 0, finished_text)
@@ -1208,7 +1202,6 @@ class WordleGuessModal(discord.ui.Modal, title="Đoán từ Wordle"):
         else:
             embed = _build_wordle_embed(user, game.get("guesses", []) if isinstance(game, dict) else [], result["guesses_left"])
             await interaction.response.edit_message(embed=embed)
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(GamesCog(bot))
