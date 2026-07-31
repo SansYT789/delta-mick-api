@@ -432,6 +432,64 @@ class GamesCog(commands.Cog):
         embed.set_footer(text="⚠️ Chỉ mang tính giải trí.")
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(name="farm-aura", description="Kiểm tra mức độ farm aura của bạn hoặc người khác 😎")
+    @app_commands.describe(user="Người muốn kiểm tra (bỏ trống = bạn)")
+    async def farm_aura(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
+        target = user or interaction.user
+
+        aura = random.Random(target.id + 88888).randint(0, 100)
+
+        if aura <= 10:
+            rank = "💀 Aura âm, đi ngủ đi."
+            color = discord.Color.red()
+        elif aura <= 25:
+            rank = "🥲 Farm hơi yếu."
+            color = discord.Color.orange()
+        elif aura <= 36:
+            rank = "😋 36 thanh hoá ăn rau má"
+            color = discord.Color.green()
+        elif aura <= 45:
+            rank = "🙂 Mới vào nghề."
+            color = discord.Color.gold()
+        elif aura <= 65:
+            rank = "😎 Farm ổn áp."
+            color = discord.Color.blue()
+         elif aura <= 67:
+            rank = "😱 Six seven"
+            color = discord.Color.black()
+        elif aura <= 85:
+            rank = "🔥 Aura rất mạnh."
+            color = discord.Color.green()
+        elif aura <= 99:
+            rank = "⚡ Quái vật farm aura."
+            color = discord.Color.purple()
+        else:
+            rank = "👑 100% THẦN THÁNH AURA"
+            color = discord.Color.fuchsia()
+
+        bar = "█" * (aura // 5) + "░" * (20 - aura // 5)
+
+        embed = discord.Embed(
+            title="😎 Kiểm tra Aura",
+            color=color
+        )
+        embed.set_author(
+            name=target.display_name,
+            icon_url=target.display_avatar.url
+        )
+        embed.add_field(
+            name="Aura",
+            value=f"**{aura}%**\n`{bar}`",
+            inline=False
+        )
+        embed.add_field(
+            name="Đánh giá",
+            value=rank,
+            inline=False
+        )
+        embed.set_footer(text="Chỉ mang tính giải trí.")
+        await interaction.response.send_message(embed=embed)
+
     @app_commands.command(name="boi-toan", description="Bói toán vui về thân phận của một người")
     @app_commands.describe(user="Người muốn bói (bỏ trống = bói chính bạn)")
     async def boi_toan(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
