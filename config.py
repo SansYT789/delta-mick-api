@@ -6,6 +6,14 @@ MANGO_MUSTARD_DAY = {
     "reward_plus": 36,  # Phần thưởng mango+
 }
 
+# Meme Achievement
+MEME_CONFIG = {
+    "channel_id": 1528562696398831616,  # Kênh meme
+    "role_id": 1529765560433381427,  # Role thưởng
+    "required_count": 20,  # Số meme cần đạt
+    "cooldown_minutes": 5,  # Thời gian giữa các lần kiểm tra (phút)
+}
+
 COMPANIES = {
     "delta": {
         "name": "Tập đoàn Delta",

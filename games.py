@@ -246,110 +246,126 @@ class GamesCog(commands.Cog):
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
+
         content = message.content.strip()
-        if len(content) != 5 or not content.isalpha() or not content.isascii():
-            return
 
-        game = store.get_active_wordle_game(message.channel.id)
-        if game is None:
-            return
+        # ===== WORDLE ===== (chỉ xử lý nếu đúng 5 ký tự chữ cái, KHÔNG return khỏi toàn hàm
+        # để nhánh Mango Mustard Day bên dưới vẫn luôn được kiểm tra độc lập)
+        if len(content) == 5 and content.isalpha() and content.isascii():
+            game = store.get_active_wordle_game(message.channel.id)
+            if game is not None:
+                result = store.submit_wordle_guess(message.channel.id, message.author.id, content)
+                if result["status"] != "no_game":
+                    emoji_map = {"correct": "🟩", "present": "🟨", "absent": "⬜"}
+                    row = "".join(emoji_map[r] for r in result["result"])
 
-        result = store.submit_wordle_guess(message.channel.id, message.author.id, content)
-        if result["status"] == "no_game":
-            return
+                    if result["status"] == "win":
+                        stats_result = store.update_wordle_stats(message.author.id, True)
+                        store.transaction_mango(message.author.id, store.WORDLE_WIN_REWARD_MANGO)
 
-        emoji_map = {"correct": "🟩", "present": "🟨", "absent": "⬜"}
-        row = "".join(emoji_map[r] for r in result["result"])
+                        response = f"{row}\n🎉 **{message.author.mention} đoán trúng: `{result['word']}`!** " \
+                              f"Nhận **{store.WORDLE_WIN_REWARD_MANGO} 🥭**!"
 
-        if result["status"] == "win":
-            stats_result = store.update_wordle_stats(message.author.id, True)
-            store.transaction_mango(message.author.id, store.WORDLE_WIN_REWARD_MANGO)
+                        if stats_result.get("achievement"):
+                            role_mappings = store.get_wordle_achievement_roles()
+                            if stats_result["achievement"] == "streak":
+                                role_id = role_mappings.get("streak")
+                                if role_id and message.guild:
+                                    role = message.guild.get_role(role_id)
+                                    if role and role not in message.author.roles:
+                                        try:
+                                            await message.author.add_roles(role)
+                                            response += f"\n🏆 **{message.author.mention} đã đạt chuỗi thắng {store.WORDLE_WIN_STREAK_REQUIRED} ván liên tiếp!**"
+                                            response += f"\nPhần thưởng: <@&{role_id}>"
+                                        except discord.Forbidden:
+                                            pass
+                            elif stats_result["achievement"] == "total_wins":
+                                role_id = role_mappings.get("total_wins")
+                                if role_id and message.guild:
+                                    role = message.guild.get_role(role_id)
+                                    if role and role not in message.author.roles:
+                                        try:
+                                            await message.author.add_roles(role)
+                                            response += f"\n🏆 **{message.author.mention} đã đạt {store.WORDLE_TOTAL_WINS_REQUIRED} lần chiến thắng Wordle!**"
+                                            response += f"\nPhần thưởng: <@&{role_id}>"
+                                        except discord.Forbidden:
+                                            pass
 
-            response = f"{row}\n🎉 **{message.author.mention} đoán trúng: `{result['word']}`!** " \
-                  f"Nhận **{store.WORDLE_WIN_REWARD_MANGO} 🥭**!"
+                        await message.reply(response)
+                    elif result["status"] == "lose":
+                        for uid in result["participants"]:
+                            store.transaction_mango(uid, store.WORDLE_PARTICIPATE_REWARD_PLUS, use_plus=True)
+                        mentions = ", ".join(f"<@{uid}>" for uid in result["participants"])
+                        await message.reply(
+                            f"{row}\n💀 Hết lượt rồi! Từ bí mật là **`{result['word']}`**.\n"
+                            f"Cảm ơn {mentions} đã chơi — mỗi người nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+**",
+                        )
+                    else:
+                        await message.reply(f"`{content}`\n{row}\nCòn **{result['guesses_left']}** lượt đoán.")
 
-            if stats_result.get("achievement"):
-                role_mappings = store.get_wordle_achievement_roles()
-                if stats_result["achievement"] == "streak":
-                    role_id = role_mappings.get("streak")
-                    if role_id and message.guild:
-                        role = message.guild.get_role(role_id)
-                        if role and role not in message.author.roles:
-                            try:
-                                await message.author.add_roles(role)
-                                response += f"\n🏆 **{message.author.mention} đã đạt chuỗi thắng {store.WORDLE_WIN_STREAK_REQUIRED} ván liên tiếp!**"
-                                response += f"\nPhần thưởng: <@&{role_id}>"
-                            except discord.Forbidden:
-                                pass
-                elif stats_result["achievement"] == "total_wins":
-                    role_id = role_mappings.get("total_wins")
-                    if role_id and message.guild:
-                        role = message.guild.get_role(role_id)
-                        if role and role not in message.author.roles:
-                            try:
-                                await message.author.add_roles(role)
-                                response += f"\n🏆 **{message.author.mention} đã đạt {store.WORDLE_TOTAL_WINS_REQUIRED} lần chiến thắng Wordle!**"
-                                response += f"\nPhần thưởng: <@&{role_id}>"
-                            except discord.Forbidden:
-                                pass
+        # ===== MEME ACHIEVEMENT ===== (độc lập với Wordle — luôn kiểm tra, không bị chặn)
+        if message.channel.id == config.MEME_CONFIG["channel_id"]:
+            content_lower = message.content.lower()
+            has_link = any(kw in content_lower for kw in (
+                "http://", "https://", ".jpg", ".png", ".gif", ".mp4",
+                "tenor.com", "giphy.com", "imgur.com", "youtu.be", "youtube.com",
+            ))
+            if has_link:
+                user = message.author
+                guild = message.guild
+                new_count = store.increment_meme_count(user.id)
 
-            await message.reply(response)
-        elif result["status"] == "lose":
-            for uid in result["participants"]:
-                store.transaction_mango(uid, store.WORDLE_PARTICIPATE_REWARD_PLUS, use_plus=True)
-            mentions = ", ".join(f"<@{uid}>" for uid in result["participants"])
-            await message.reply(
-                f"{row}\n💀 Hết lượt rồi! Từ bí mật là **`{result['word']}`**.\n"
-                f"Cảm ơn {mentions} đã chơi — mỗi người nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+**",
-            )
-        else:
-            await message.reply(f"`{content}`\n{row}\nCòn **{result['guesses_left']}** lượt đoán.")
+                if new_count >= config.MEME_CONFIG["required_count"] and not store.has_meme_role(user.id, guild.id):
+                    role_id = config.MEME_CONFIG["role_id"]
+                    role = guild.get_role(role_id)
+                    if role:
+                        try:
+                            await user.add_roles(role, reason=f"Đã gửi {new_count} meme trong kênh meme")
+                            store.claim_meme_role(user.id)
 
-        # ===== Mango Mustard Day Event =====
-        # Kiểm tra sự kiện
+                            embed = discord.Embed(
+                                title="🎉 **Thành tích Meme Master!**",
+                                description=f"{user.mention} đã gửi **{new_count} meme** trong kênh <#{config.MEME_CONFIG['channel_id']}>!",
+                                color=discord.Color.gold(),
+                            )
+                            embed.add_field(name="🏆 Phần thưởng", value=f"Đã nhận role <@&{role_id}>", inline=True)
+                            embed.set_footer(text="Tiếp tục gửi meme để giữ vững danh hiệu!")
+                            await message.channel.send(content=f"🎊 Chúc mừng {user.mention}! <@&{role_id}>", embed=embed)
+                        except discord.Forbidden:
+                            print(f"Bot thiếu quyền thêm role {role_id} cho user {user.id}")
+                        except discord.HTTPException as e:
+                            print(f"Lỗi khi thêm role: {e}")
+
+        # ===== MANGO MUSTARD DAY EVENT ===== (độc lập hoàn toàn — luôn kiểm tra mỗi tin nhắn,
+        # KHÔNG bị chặn bởi nhánh Wordle ở trên nữa — đây chính là fix bug "hiện ứng dụng không phản hồi"
+        # thực chất là do logic này trước đây nằm SAU 1 early-return của Wordle nên không bao giờ chạy tới)
         if store.is_mango_mustard_day():
-            content = message.content.strip()
-            # Kiểm tra câu trigger (không phân biệt hoa thường)
             if content.upper() == config.MANGO_MUSTARD_DAY["trigger_phrase"].upper():
                 user = message.author
 
-                # Kiểm tra đã nhận thưởng chưa
                 if store.has_claimed_mango_mustard_day(user.id):
                     await message.reply(
-                        f"🌭 Bạn đã nhận thưởng Mango Mustard Day rồi! Hãy chờ năm sau nhé 🥭",
-                        delete_after=10
+                        "🌭 Bạn đã nhận thưởng Mango Mustard Day rồi! Hãy chờ năm sau nhé 🥭",
+                        delete_after=10,
                     )
                     return
 
-                # Cộng thưởng
                 success = store.claim_mango_mustard_day(user.id)
                 if success:
                     reward_mango = config.MANGO_MUSTARD_DAY["reward_mango"]
                     reward_plus = config.MANGO_MUSTARD_DAY["reward_plus"]
 
-                    # Tạo embed thông báo
                     embed = discord.Embed(
                         title="🌭 **Mango Mustard Day!!** 🥭",
                         description=f"🎉 {user.mention} đã tham gia Mango Mustard Day thành công!",
-                        color=discord.Color.gold()
+                        color=discord.Color.gold(),
                     )
-                    embed.add_field(
-                        name="Phần thưởng nhận được",
-                        value=f"**{reward_mango} 🥭** và **{reward_plus} 🥭+**",
-                        inline=True
-                    )
-                    embed.add_field(
-                        name="Ngày sự kiện",
-                        value=f"<t:1785553200:R>",
-                        inline=True
-                    )
+                    embed.add_field(name="Phần thưởng nhận được", value=f"**{reward_mango} 🥭** và **{reward_plus} 🥭+**", inline=True)
+                    embed.add_field(name="Ngày sự kiện", value="<t:1785553200:R>", inline=True)
                     embed.set_footer(text="Mango Mustard Day - 1/8/2026")
 
                     role_id = config.MANGO_MUSTARD_DAY["event_role_id"]
-                    await message.reply(
-                        content=f"<@&{role_id}>",
-                        embed=embed
-                    )
+                    await message.reply(content=f"<@&{role_id}>", embed=embed)
 
                     try:
                         role = message.guild.get_role(role_id)
@@ -360,7 +376,8 @@ class GamesCog(commands.Cog):
                 else:
                     await message.reply(
                         "❌ Có lỗi xảy ra khi nhận thưởng, vui lòng thử lại hoặc liên hệ admin.",
-                        delete_after=10)
+                        delete_after=10,
+                    )
 
     @app_commands.command(name="wordle-stats", description="Xem thống kê Wordle của bạn")
     async def wordle_stats(self, interaction: discord.Interaction, user: discord.Member | None = None):
@@ -452,6 +469,66 @@ class GamesCog(commands.Cog):
     
         embed.set_footer(text=f"ID sự kiện: {int(event_date.timestamp())}")
         await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="meme-count", description="Xem số lượng meme bạn đã gửi")
+    async def meme_count(self, interaction: discord.Interaction, user: discord.Member | None = None):
+        target = user or interaction.user
+        count = store.get_meme_count(target.id)
+        required = config.MEME_CONFIG["required_count"]
+
+        embed = discord.Embed(title=f"🖼️ Số lượng meme của {target.display_name}", color=discord.Color.purple())
+        embed.add_field(name="Đã gửi", value=f"**{count}** meme", inline=True)
+        embed.add_field(name="Mục tiêu", value=f"**{required}** meme", inline=True)
+
+        progress = min(count / required * 100, 100)
+        bar_length = 20
+        filled = int(progress / 100 * bar_length)
+        bar = "█" * filled + "░" * (bar_length - filled)
+        embed.add_field(name="Tiến độ", value=f"`{bar}` {progress:.1f}%", inline=False)
+
+        if count >= required:
+            embed.add_field(
+                name="✅ Trạng thái",
+                value=f"Bạn đã đạt mục tiêu! Đã nhận role <@&{config.MEME_CONFIG['role_id']}>",
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="⏳ Trạng thái",
+                value=f"Còn **{required - count}** meme nữa để nhận role <@&{config.MEME_CONFIG['role_id']}>",
+                inline=False,
+            )
+
+        embed.set_footer(text="Chỉ tính meme có link ảnh/video trong kênh #meme")
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="reset-meme", description="Reset số lượng meme của user (chỉ chủ bot)")
+    @app_commands.describe(user="User cần reset", confirm="Gõ 'YES' để xác nhận")
+    async def reset_meme(self, interaction: discord.Interaction, user: discord.Member, confirm: str = None):
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message("Bạn không có quyền.", ephemeral=True)
+            return
+
+        if confirm != "YES":
+            await interaction.response.send_message(
+                f"⚠️ Bạn cần gõ `YES` để xác nhận reset.\nVí dụ: `/reset-meme user:{user.mention} confirm:YES`",
+                ephemeral=True,
+            )
+            return
+
+        store.reset_meme_count_for_user(user.id)
+
+        role_id = config.MEME_CONFIG["role_id"]
+        role = interaction.guild.get_role(role_id)
+        if role and role in user.roles:
+            try:
+                await user.remove_roles(role, reason="Reset meme count")
+            except discord.Forbidden:
+                pass
+
+        await interaction.response.send_message(
+            f"✅ Đã reset số lượng meme của {user.mention} và xoá role <@&{role_id}>", ephemeral=True
+        )
 
     @app_commands.command(name="mango", description="Xem số mango của bạn hoặc người khác")
     @app_commands.describe(user="Người muốn xem (bỏ trống = xem của bạn)")

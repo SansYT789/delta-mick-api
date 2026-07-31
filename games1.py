@@ -13,6 +13,13 @@ WIKI_LANGS_TRY_ORDER = ["vi", "en"]
 REQUEST_TIMEOUT_SEC = 8
 MAX_RETRIES = 2
 
+# Wikipedia API yêu cầu User-Agent hợp lệ theo chính sách chống lạm dụng
+# (https://meta.wikimedia.org/wiki/User-Agent_policy) — thiếu header này khiến
+# request bị từ chối/giới hạn âm thầm, đây là nguyên nhân /wiki không tìm được gì.
+HEADERS = {
+    "User-Agent": "DeltaMickBot/1.0 (Discord bot; contact via server owner)"
+}
+
 class WikiCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -36,6 +43,10 @@ class WikiCog(commands.Cog):
     async def _wiki_search_title(self, session: aiohttp.ClientSession, lang: str, query: str) -> Optional[str]:
         url = f"https://{lang}.wikipedia.org/w/api.php"
 
+        # CHIẾN LƯỢC CHÍNH: full-text search (srwhat=text) — đây là cách tìm kiếm thông thường,
+        # khớp được với query tự nhiên như "thuyết internet chết" ra bài "Thuyết Internet chết".
+        # (srwhat=nearmatch trước đây quá nghiêm ngặt, chỉ khớp khi gần như TRÙNG TUYỆT ĐỐI
+        # tiêu đề bài viết, nên hầu như luôn thất bại với cách người dùng gõ tự nhiên.)
         params_fulltext = {
             "action": "query",
             "list": "search",
@@ -46,7 +57,7 @@ class WikiCog(commands.Cog):
         }
 
         try:
-            async with session.get(url, params=params_fulltext, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+            async with session.get(url, params=params_fulltext, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     results = data.get("query", {}).get("search", [])
@@ -67,7 +78,7 @@ class WikiCog(commands.Cog):
         }
 
         try:
-            async with session.get(url, params=params_nearmatch, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+            async with session.get(url, params=params_nearmatch, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     results = data.get("query", {}).get("search", [])
@@ -86,7 +97,7 @@ class WikiCog(commands.Cog):
         }
 
         try:
-            async with session.get(url, params=params_prefix, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+            async with session.get(url, params=params_prefix, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     results = data.get("query", {}).get("prefixsearch", [])
@@ -107,7 +118,7 @@ class WikiCog(commands.Cog):
         }
 
         try:
-            async with session.get(url, params=params_opensearch, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+            async with session.get(url, params=params_opensearch, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if len(data) > 1 and data[1]:
@@ -142,7 +153,7 @@ class WikiCog(commands.Cog):
             url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{encoded_title}"
 
             try:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
+                async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SEC)) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         if data.get("type") != "disambiguation":

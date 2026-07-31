@@ -648,3 +648,63 @@ def claim_mango_mustard_day(user_id: int) -> bool:
 def is_mango_mustard_day() -> bool:
     today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
     return today == config.MANGO_MUSTARD_DAY["date"]
+
+# ===== Meme Achievement =====
+def get_meme_count(user_id: int) -> int:
+    """Lấy số lượng meme đã gửi của user"""
+    try:
+        ref = db.reference(f"users/{user_id}/meme_count")
+        return ref.get() or 0
+    except Exception:
+        return 0
+
+def increment_meme_count(user_id: int) -> int:
+    """Tăng số lượng meme và trả về số mới"""
+    try:
+        ref = db.reference(f"users/{user_id}/meme_count")
+        current = ref.get() or 0
+        new_count = current + 1
+        ref.set(new_count)
+        
+        # Kiểm tra xem đã đạt mốc 20 chưa
+        if new_count >= config.MEME_CONFIG["required_count"]:
+            return new_count
+        return new_count
+    except Exception as e:
+        print(f"Lỗi increment_meme_count: {e}")
+        return 0
+
+def has_meme_role(user_id: int, guild_id: int) -> bool:
+    """Kiểm tra user đã có role meme chưa (qua database)"""
+    try:
+        ref = db.reference(f"users/{user_id}/meme_role_claimed")
+        return ref.get() == True
+    except Exception:
+        return False
+
+def claim_meme_role(user_id: int) -> bool:
+    """Đánh dấu user đã nhận role meme"""
+    try:
+        ref = db.reference(f"users/{user_id}/meme_role_claimed")
+        if ref.get() == True:
+            return False
+        ref.set(True)
+        return True
+    except Exception:
+        return False
+
+def reset_meme_count_for_user(user_id: int) -> None:
+    """Reset số lượng meme và trạng thái role đã nhận của 1 user cụ thể."""
+    db.reference(f"users/{user_id}/meme_count").set(0)
+    db.reference(f"users/{user_id}/meme_role_claimed").set(False)
+
+def reset_meme_counts():
+    """Reset số lượng meme của TOÀN BỘ user (dùng cho maintenance)."""
+    try:
+        users = db.reference("users").get() or {}
+        for uid in users:
+            if isinstance(users[uid], dict) and "meme_count" in users[uid]:
+                db.reference(f"users/{uid}/meme_count").set(0)
+        return True
+    except Exception:
+        return False
