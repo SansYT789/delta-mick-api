@@ -378,6 +378,60 @@ class GamesCog(commands.Cog):
         )
 
     # ==================== GAME COMMANDS ====================
+    @app_commands.command(name="gay", description="Kiểm tra độ gay của bạn hoặc người khác 🌈")
+    @app_commands.describe(user="Người muốn kiểm tra (bỏ trống = bạn)")
+    async def gay(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
+        target = user or interaction.user
+
+        percent = random.Random(target.id + 69420).randint(0, 100)
+
+        if percent == 0:
+            comment = "🗿 Hoàn toàn thẳng."
+            color = discord.Color.green()
+        elif percent <= 20:
+            comment = "🙂 Hơi có dấu hiệu..."
+            color = discord.Color.blue()
+        elif percent <= 40:
+            comment = "😏 Có chút đáng ngờ."
+            color = discord.Color.gold()
+        elif percent <= 60:
+            comment = "🌈 Cân bằng hoàn hảo."
+            color = discord.Color.orange()
+        elif percent <= 80:
+            comment = "💅 Khá là rõ ràng."
+            color = discord.Color.magenta()
+        elif percent < 100:
+            comment = "🏳️‍🌈 Gay cấp độ siêu cấp!"
+            color = discord.Color.purple()
+        else:
+            comment = "👑 100% Gay. Không còn gì để bàn."
+            color = discord.Color.red()
+
+        bar_len = 20
+        filled = round(percent / 100 * bar_len)
+        bar = "█" * filled + "░" * (bar_len - filled)
+
+        embed = discord.Embed(
+            title="🌈 Máy đo Gay",
+            color=color
+        )
+        embed.set_author(
+            name=target.display_name,
+            icon_url=target.display_avatar.url
+        )
+        embed.add_field(
+            name="Kết quả",
+            value=f"**{percent}%**\n`{bar}`",
+            inline=False
+        )
+        embed.add_field(
+            name="Đánh giá",
+            value=comment,
+            inline=False
+        )
+        embed.set_footer(text="⚠️ Chỉ mang tính giải trí.")
+        await interaction.response.send_message(embed=embed)
+
     @app_commands.command(name="boi-toan", description="Bói toán vui về thân phận của một người")
     @app_commands.describe(user="Người muốn bói (bỏ trống = bói chính bạn)")
     async def boi_toan(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
