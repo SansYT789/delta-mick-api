@@ -13,7 +13,7 @@ import config
 MAX_CLEAR_AMOUNT = 2000  # trần an toàn
 BOT_OWNER_ID = 985004175110848512  # chủ bot user id
 
-BOT_VERSION = "1.1.3"
+BOT_VERSION = "1.1.4"
 BOT_DESCRIPTION = "Delta Mick Entertainment đa năng các hoạt động lệnh giải trí: kinh tế, mini-game và tiện ích."
 
 def _roll_fortune(target_user_id: int) -> dict:
@@ -351,15 +351,17 @@ class GamesCog(commands.Cog):
 
     @app_commands.command(name="mango-mustard-day", description="Kiểm tra thông tin sự kiện Mango Mustard Day")
     async def mango_mustard_day(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
         event_date = datetime.datetime.strptime(config.MANGO_MUSTARD_DAY["date"], "%Y-%m-%d")
         event_date = event_date.replace(tzinfo=datetime.timezone.utc)
-    
+
         embed = discord.Embed(
             title="🌭 Mango Mustard Day 2026 🥭",
             description="Sự kiện đặc biệt của server!",
             color=discord.Color.gold()
         )
-    
+
         # Kiểm tra đã diễn ra chưa
         now = datetime.datetime.utcnow()
         if now >= event_date:
@@ -379,7 +381,7 @@ class GamesCog(commands.Cog):
                 value=f"⏳ Sự kiện sẽ diễn ra vào <t:{int(event_date.timestamp())}:R>",
                 inline=False
             )
-    
+
         embed.add_field(
             name="🎁 Phần thưởng",
             value=f"**{config.MANGO_MUSTARD_DAY['reward_mango']} 🥭** + **{config.MANGO_MUSTARD_DAY['reward_plus']} 🥭+**",
@@ -390,7 +392,7 @@ class GamesCog(commands.Cog):
             value="Mỗi người chỉ được nhận **1 lần duy nhất**",
             inline=True
         )
-    
+
         # Kiểm tra user đã nhận chưa
         if store.has_claimed_mango_mustard_day(interaction.user.id):
             embed.add_field(
@@ -404,9 +406,9 @@ class GamesCog(commands.Cog):
                 value="Bạn chưa nhận thưởng! Hãy tham gia ngay!",
                 inline=False
             )
-    
+
         embed.set_footer(text=f"ID sự kiện: {int(event_date.timestamp())}")
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="meme-count", description="Xem số lượng meme bạn đã gửi")
     async def meme_count(self, interaction: discord.Interaction, user: discord.Member | None = None):
@@ -565,6 +567,162 @@ class GamesCog(commands.Cog):
             color=discord.Color.dark_blue(),
         )
         await interaction.response.send_message(embed=embed, view=view)
+
+    @app_commands.command(name="promote", description="[Owner] Thăng chức cho người chơi")
+    @app_commands.describe(
+        user="Người chơi cần thăng chức",
+        level="Số cấp muốn thăng (mặc định: 1)"
+    )
+    async def promote(self, interaction: discord.Interaction, user: discord.Member, level: int = 1):
+        # Kiểm tra quyền Owner
+        if interaction.user.id != BOT_OWNER_ID:
+            embed = discord.Embed(
+                title="❌ Lỗi quyền hạn",
+                description="Chỉ **chủ bot** mới có thể sử dụng lệnh này!",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # Kiểm tra level hợp lệ
+        if level < 1:
+            embed = discord.Embed(
+                title="❌ Lỗi",
+                description="Số cấp phải lớn hơn 0!",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+        # Lấy dữ liệu work của user
+        work_data = store.get_work_data(user.id)
+        current_level = work_data.get("position_level", 0)
+        new_level = min(current_level + level, config.MAX_POSITION_LEVEL)
+
+        # Kiểm tra nếu đã max level
+        if current_level >= MAX_POSITION_LEVEL:
+            embed = discord.Embed(
+                title="⚠️ Đã đạt cấp tối đa",
+                description=f"**{user.display_name}** đã đạt chức vụ cao nhất: **{config.POSITION_NAMES[-1]}**",
+                color=discord.Color.orange()
+            )
+            await interaction.response.send_message(embed=embed)
+            return
+
+        # Cập nhật position level
+        def _promote(d):
+            d.setdefault("work", dict(store.DEFAULT_WORK_DATA))
+            d["work"]["position_level"] = new_level
+            return d
+
+        store._update_work_data(user.id, _promote)
+
+        # Tạo embed kết quả
+        embed = discord.Embed(
+            title="🎉 Thăng chức thành công!",
+            color=discord.Color.gold()
+        )
+        embed.add_field(
+            name="Người chơi",
+            value=f"{user.mention}",
+            inline=True
+        )
+        embed.add_field(
+            name="Chức vụ cũ → Chức vụ mới",
+            value=f"`{config.POSITION_NAMES[current_level]}` → `{config.POSITION_NAMES[new_level]}` (+{level} cấp)",
+            inline=True
+        )
+        embed.add_field(
+            name="Tiến độ",
+            value=f"`{new_level}/{config.MAX_POSITION_LEVEL}`",
+            inline=True
+        )
+        embed.set_footer(text=f"Được thực hiện bởi {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
+
+        try:
+            dm_embed = discord.Embed(
+                title="🎊 Bạn đã được thăng chức!",
+                description=f"Bạn đã được thăng chức từ **{config.POSITION_NAMES[current_level]}** lên **{config.POSITION_NAMES[new_level]}**",
+                color=discord.Color.gold()
+            )
+            await user.send(embed=dm_embed)
+        except discord.HTTPException:
+            pass
+
+    @app_commands.command(name="workinfo", description="Xem thông tin công việc của người chơi")
+    @app_commands.describe(user="Người chơi cần xem (mặc định: bạn)")
+    async def workinfo(self,  interaction: discord.Interaction, user: discord.Member = None):
+        target = user or interaction.user
+        work_data = store.get_work_data(target.id)
+    
+        current_level = work_data.get("position_level", 0)
+        streak_weeks = work_data.get("streak_weeks", 0)
+        current_company = work_data.get("current_company", None)
+    
+        embed = discord.Embed(
+            title=f"💼 Thông tin công việc của {target.display_name}",
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="Chức vụ",
+            value=f"`{config.POSITION_NAMES[current_level]}`",
+            inline=True
+        )
+        embed.add_field(
+            name="Streak",
+            value=f"`{streak_weeks} tuần`",
+            inline=True
+        )
+        embed.add_field(
+            name="Tiến độ thăng chức",
+            value=f"`{current_level}/{config.MAX_POSITION_LEVEL}`",
+            inline=True
+        )
+    
+        if current_company and current_company in config.COMPANIES:
+            company_name = config.COMPANIES[current_company]["name"]
+            embed.add_field(name="Công ty hiện tại",value=f"`{company_name}`", inline=True)
+        else:
+            embed.add_field(name="Công ty hiện tại", value="`Chưa có`", inline=True)
+    
+        # Kiểm tra cooldown
+        cooldown = store.get_work_cooldown_remaining_sec(target.id)
+        embed.add_field(
+            name="⏱️ Cooldown",
+            value=f"Còn `{_fmt_td(cooldown)}`" if cooldown > 0 else "`Sẵn sàng`",
+            inline=True
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="resetcooldown", description="Reset thời gian làm việc cho người chơi (chỉ chủ bot)")
+    @app_commands.describe(user="Người chơi cần reset cooldown")
+    async def resetcooldown(self, interaction: discord.Interaction, user: discord.Member):
+        # Kiểm tra quyền Owner
+        if interaction.user.id != BOT_OWNER_ID:
+            embed = discord.Embed(
+                title="❌ Lỗi quyền hạn",
+                description="Chỉ **chủ bot** mới có thể sử dụng lệnh này!",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # Reset work data
+        def _reset(d):
+            d.setdefault("work", dict(store.DEFAULT_WORK_DATA))
+            d["work"]["last_worked_at"] = None
+            d["work"]["company_cooldown_until"] = {}
+            return d
+
+        store._update_work_data(user.id, _reset)
+
+        embed = discord.Embed(
+            title="✅ Reset thời gian thành công",
+            description=f"Đã reset thời gian làm việc cho **{user.display_name}**",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="lixi", description="Lì xì mango hoặc mango+ cho mọi người trong kênh")
     @app_commands.describe(
@@ -894,39 +1052,44 @@ class CompanyDropdown(discord.ui.Select):
             await interaction.response.edit_message(content="👔 Đang làm việc...", embed=None, view=None)
             await asyncio.sleep(3)
 
-            result = store.do_work(self.user_id, company_id)
+            try:
+                result = store.do_work(self.user_id, company_id)
 
-            if not result.get("ok"):
-                await interaction.edit_original_response(content=f"❌ {result.get('message', 'Có lỗi xảy ra.')}")
-                return
+                if not result.get("ok"):
+                    await interaction.edit_original_response(content=f"❌ {result.get('message', 'Có lỗi xảy ra.')}")
+                    return
 
-            if result["event"]:
-                embed = discord.Embed(
-                    title=f"⚠️ Sự cố tại {result['company_name']}",
-                    description=result["event"]["text"],
-                    color=discord.Color.dark_red(),
+                if result["event"]:
+                    embed = discord.Embed(
+                        title=f"⚠️ Sự cố tại {result['company_name']}",
+                        description=result["event"]["text"],
+                        color=discord.Color.dark_red(),
+                    )
+                    embed.add_field(
+                        name="Hậu quả",
+                        value=f"Không nhận được lương, tạm ngừng làm việc tại công ty này {result['event']['penalty_hours']} giờ.",
+                        inline=False,
+                    )
+                    await interaction.edit_original_response(content=None, embed=embed)
+                    return
+
+                position_name = config.POSITION_NAMES[result["position_level"]]
+                    embed = discord.Embed(
+                    title=f"✅ Hoàn thành công việc tại {result['company_name']}",
+                    color=discord.Color.green(),
                 )
+                embed.add_field(name="Lương nhận được", value=f"{result['pay']} 🥭", inline=True)
+                embed.add_field(name="Chức vụ", value=position_name, inline=True)
                 embed.add_field(
-                    name="Hậu quả",
-                    value=f"Không nhận được lương, tạm ngừng làm việc tại công ty này {result['event']['penalty_hours']}h.",
-                    inline=False,
+                    name="Streak",
+                    value=f"{result['streak_weeks']} tuần (+{result['streak_weeks'] * store.STREAK_BONUS_PER_WEEK * 100:.0f}% lương)",
+                    inline=True,
                 )
                 await interaction.edit_original_response(content=None, embed=embed)
-                return
-
-            position_name = config.POSITION_NAMES[result["position_level"]]
-            embed = discord.Embed(
-                title=f"✅ Hoàn thành công việc tại {result['company_name']}",
-                color=discord.Color.green(),
-            )
-            embed.add_field(name="Lương nhận được", value=f"{result['pay']} 🥭", inline=True)
-            embed.add_field(name="Chức vụ", value=position_name, inline=True)
-            embed.add_field(
-                name="Streak",
-                value=f"{result['streak_weeks']} tuần (+{result['streak_weeks'] * store.STREAK_BONUS_PER_WEEK * 100:.0f}% lương)",
-                inline=True,
-            )
-            await interaction.edit_original_response(content=None, embed=embed)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                await interaction.edit_original_response(content=f"❌ Lỗi: {str(e)}", embed=None, view=None)
         except discord.HTTPException:
             pass
         except Exception:

@@ -22,6 +22,12 @@ def now_iso() -> str:
     return datetime.datetime.utcnow().isoformat()
 
 def parse_iso(s: str) -> datetime.datetime:
+    if not s:
+        return None
+    if s.endswith('Z'):
+        s = s[:-1] + '+00:00'
+    if '.' not in s and '+' not in s:
+        s = s + '+00:00'
     return datetime.datetime.fromisoformat(s)
 
 def _mango_ref(user_id: int):
@@ -50,10 +56,10 @@ def transaction_mango(user_id: int, delta: int, use_plus: bool = False):
             return current  # giữ nguyên, không cho phép âm
         return new_val
 
-    result = ref.transaction(_txn)
+    result, snapshot = ref.transaction(_txn)
     if failed["insufficient"]:
         return None
-    return result
+    return snapshot.val() if snapshot else None
 
 def convert_mango_to_plus(user_id: int, mango_amount: int) -> tuple[bool, str, int]:
     if mango_amount <= 0:
@@ -146,9 +152,15 @@ def get_work_cooldown_remaining_sec(user_id: int) -> int:
     last = data.get("last_worked_at")
     if not last:
         return 0
-    elapsed = (datetime.datetime.utcnow() - parse_iso(last)).total_seconds()
-    remaining = WORK_COOLDOWN_HOURS * 3600 - elapsed
-    return max(0, int(remaining))
+    try:
+        parsed = parse_iso(last)
+        if parsed is None:
+            return 0
+        elapsed = (datetime.datetime.utcnow() - parsed).total_seconds()
+        remaining = WORK_COOLDOWN_HOURS * 3600 - elapsed
+        return max(0, int(remaining))
+    except (ValueError, TypeError):
+        return 0
 
 def get_company_penalty_remaining_sec(user_id: int, company_id: str) -> int:
     data = get_work_data(user_id)
@@ -166,10 +178,11 @@ def _update_work_data(user_id: int, fn):
         current.setdefault("work", dict(DEFAULT_WORK_DATA))
         return fn(current)
 
-    return ref.transaction(_txn)
+    result, snapshot = ref.transaction(_txn)
+    return snapshot.val() if snapshot else None
 
 def do_work(user_id: int, company_id: str) -> dict:
-    if company_id not in config.config.COMPANIES:
+    if company_id not in config.COMPANIES:
         return {"ok": False, "message": "Công ty không tồn tại."}
 
     remaining = get_work_cooldown_remaining_sec(user_id)
@@ -245,7 +258,12 @@ def do_work(user_id: int, company_id: str) -> dict:
         return d
 
     _update_work_data(user_id, _apply)
-    transaction_mango(user_id, pay)
+    try:
+        new_balance = transaction_mango(user_id, pay)
+        if new_balance is None:
+            print(f"Warning: transaction_mango returned None for user {user_id}")
+    except Exception as e:
+        print(f"Error in transaction_mango: {e}")
 
     return {
         "ok": True,
