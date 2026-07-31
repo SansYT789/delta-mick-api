@@ -597,6 +597,8 @@ class GamesCog(commands.Cog):
     @app_commands.command(name="workinfo", description="Xem thông tin công việc của bạn")
     @app_commands.describe(user="Người chơi cần xem (mặc định: bạn)")
     async def workinfo(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
+        await interaction.response.defer()
+
         target = user or interaction.user
         work_data = store.get_work_data(target.id)
 
@@ -637,7 +639,7 @@ class GamesCog(commands.Cog):
             value=f"Còn `{_fmt_td(cooldown)}`" if cooldown > 0 else "`Sẵn sàng`",
             inline=True
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="lixi", description="Lì xì mango cho mọi người trong kênh")
     @app_commands.describe(
@@ -1166,35 +1168,31 @@ class CompanyDropdown(discord.ui.Select):
         company_id = self.values[0]
 
         try:
-            # Check cooldown
-            cooldown = store.get_work_cooldown_remaining_sec(self.user_id)
-            if cooldown > 0:
-                await interaction.response.edit_message(
-                    content=f"⏱️ Bạn cần chờ **{_fmt_td(cooldown)}** nữa mới đi làm tiếp được.",
-                    embed=None, view=None,
-                )
-                return
-
-            # Check company penalty
-            penalty = store.get_company_penalty_remaining_sec(self.user_id, company_id)
-            if penalty > 0:
-                await interaction.response.edit_message(
-                    content=f"🚫 Công ty này đang tạm ngừng nhận bạn, còn **{_fmt_td(penalty)}** nữa.",
-                    embed=None, view=None,
-                )
-                return
-
             await interaction.response.edit_message(
                 content="👔 Đang làm việc...", embed=None, view=None
             )
-            await asyncio.sleep(3)
+            await asyncio.sleep(1)
 
             result = store.do_work(self.user_id, company_id)
 
             if not result.get("ok"):
-                await interaction.edit_original_response(
-                    content=f"❌ {result.get('message', 'Có lỗi xảy ra.')}"
-                )
+                msg = result["message"]
+                if msg.startswith("cooldown:"):
+                    sec = int(msg.split(":")[1])
+                    await interaction.edit_original_response(
+                        content=f"⏱️ Bạn cần chờ **{_fmt_td(sec)}** nữa mới đi làm tiếp được.",
+                        embed=None, view=None,
+                    )
+                elif msg.startswith("company_penalty:"):
+                    sec = int(msg.split(":")[1])
+                    await interaction.edit_original_response(
+                        content=f"🚫 Công ty này đang tạm ngừng nhận bạn, còn **{_fmt_td(sec)}** nữa.",
+                        embed=None, view=None,
+                    )
+                else:
+                    await interaction.edit_original_response(
+                        content=f"❌ {result.get('message', 'Có lỗi xảy ra.')}"
+                    )
                 return
 
             if result["event"]:
@@ -1211,7 +1209,9 @@ class CompanyDropdown(discord.ui.Select):
                 await interaction.edit_original_response(content=None, embed=embed)
                 return
 
-            position_name = config.POSITION_NAMES[result["position_level"]]
+            idx = min(result["position_level"], len(config.POSITION_NAMES) - 1)
+            position_name = config.POSITION_NAMES[idx]
+
             embed = discord.Embed(
                 title=f"✅ Hoàn thành công việc tại {result['company_name']}",
                 color=discord.Color.green(),
@@ -1229,7 +1229,7 @@ class CompanyDropdown(discord.ui.Select):
             import traceback
             traceback.print_exc()
             await interaction.edit_original_response(
-                content=f"❌ Lỗi: {str(e)}", embed=None, view=None
+                content=f"❌ Đã xảy ra lỗi không mong muốn.", embed=None, view=None
             )
 
 class LixiClaimView(discord.ui.View):

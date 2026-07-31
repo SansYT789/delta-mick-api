@@ -139,27 +139,32 @@ DEFAULT_WORK_DATA = {
 }
 
 def get_work_data(user_id: int) -> dict:
-    data = _work_ref(user_id).get()
-    if data is None:
+    try:
+        data = _work_ref(user_id).get()
+        if data is None:
+            return dict(DEFAULT_WORK_DATA)
+        merged = dict(DEFAULT_WORK_DATA)
+        merged.update(data)
+        merged.setdefault("company_cooldown_until", {})
+        return merged
+    except Exception as e:
+        print(f"Error getting work data for user {user_id}: {e}")
         return dict(DEFAULT_WORK_DATA)
-    merged = dict(DEFAULT_WORK_DATA)
-    merged.update(data)
-    merged.setdefault("company_cooldown_until", {})
-    return merged
 
 def get_work_cooldown_remaining_sec(user_id: int) -> int:
-    data = get_work_data(user_id)
-    last = data.get("last_worked_at")
-    if not last:
-        return 0
     try:
+        data = get_work_data(user_id)
+        last = data.get("last_worked_at")
+        if not last:
+            return 0
         parsed = parse_iso(last)
         if parsed is None:
             return 0
         elapsed = (datetime.datetime.utcnow() - parsed).total_seconds()
         remaining = WORK_COOLDOWN_HOURS * 3600 - elapsed
         return max(0, int(remaining))
-    except (ValueError, TypeError):
+    except Exception as e:
+        print(f"Error getting cooldown for user {user_id}: {e}")
         return 0
 
 def get_company_penalty_remaining_sec(user_id: int, company_id: str) -> int:
@@ -167,7 +172,10 @@ def get_company_penalty_remaining_sec(user_id: int, company_id: str) -> int:
     until = data.get("company_cooldown_until", {}).get(company_id)
     if not until:
         return 0
-    remaining = (parse_iso(until) - datetime.datetime.utcnow()).total_seconds()
+    parsed = parse_iso(until)
+    if parsed is None:
+        return 0
+    remaining = (parsed - datetime.datetime.utcnow()).total_seconds()
     return max(0, int(remaining))
 
 def _update_work_data(user_id: int, fn):
@@ -175,11 +183,13 @@ def _update_work_data(user_id: int, fn):
 
     def _txn(current):
         current = current or {}
-        current.setdefault("work", dict(DEFAULT_WORK_DATA))
+        work = current.setdefault("work", {})
+        for k, v in DEFAULT_WORK_DATA.items():
+            work.setdefault(k, copy.deepcopy(v))
         return fn(current)
 
-    result, snapshot = ref.transaction(_txn)
-    return snapshot.val() if snapshot else None
+    result = ref.transaction(_txn)
+    return result
 
 def do_work(user_id: int, company_id: str) -> dict:
     if company_id not in config.COMPANIES:
@@ -224,12 +234,14 @@ def do_work(user_id: int, company_id: str) -> dict:
         company_cooldowns[company_id] = penalty_until
 
         def _apply_event(d):
-            d.setdefault("work", dict(DEFAULT_WORK_DATA))
-            d["work"]["last_worked_at"] = now.isoformat()
-            d["work"]["current_company"] = company_id
-            d["work"]["streak_weeks"] = 0
-            d["work"]["position_level"] = position_level
-            d["work"]["company_cooldown_until"] = company_cooldowns
+            work = d.setdefault("work", {})
+            for k, v in DEFAULT_WORK_DATA.items():
+                work.setdefault(k, copy.deepcopy(v))
+            work["last_worked_at"] = now.isoformat()
+            work["current_company"] = company_id
+            work["streak_weeks"] = 0
+            work["position_level"] = position_level
+            work["company_cooldown_until"] = company_cooldowns
             return d
 
         _update_work_data(user_id, _apply_event)
@@ -245,16 +257,19 @@ def do_work(user_id: int, company_id: str) -> dict:
     lo, hi = config.COMPANIES[company_id]["base_pay"]
     base_pay = random.randint(lo, hi)
     streak_mult = 1.0 + streak_weeks * STREAK_BONUS_PER_WEEK
-    position_mult = 1.0 + config.POSITION_BUFFS[min(position_level, len(config.POSITION_BUFFS) - 1)]
+    level = min(position_level, len(config.POSITION_BUFFS)-1)
+    position_mult = 1.0 + config.POSITION_BUFFS[level]
     pay = max(1, round(base_pay * streak_mult * position_mult))
 
     def _apply(d):
-        d.setdefault("work", dict(DEFAULT_WORK_DATA))
-        d["work"]["last_worked_at"] = now.isoformat()
-        d["work"]["current_company"] = company_id
-        d["work"]["streak_weeks"] = streak_weeks
-        d["work"]["position_level"] = position_level
-        d["work"]["company_cooldown_until"] = company_cooldowns
+        work = d.setdefault("work", {})
+        for k, v in DEFAULT_WORK_DATA.items():
+            work.setdefault(k, copy.deepcopy(v))
+        work["last_worked_at"] = now.isoformat()
+        work["current_company"] = company_id
+        work["streak_weeks"] = streak_weeks
+        work["position_level"] = position_level
+        work["company_cooldown_until"] = company_cooldowns
         return d
 
     _update_work_data(user_id, _apply)
@@ -281,8 +296,13 @@ def promote_position(user_id: int) -> tuple[bool, str]:
         return False, "Đã đạt chức vụ cao nhất."
 
     def _promote(d):
-        d.setdefault("work", dict(DEFAULT_WORK_DATA))
-        d["work"]["position_level"] = d["work"].get("position_level", 0) + 1
+        work = d.setdefault("work", {})
+        for k, v in DEFAULT_WORK_DATA.items():
+            work.setdefault(k, copy.deepcopy(v))
+        lvl = work["position_level"]
+        if lvl >= config.MAX_POSITION_LEVEL:
+            return d
+        work["position_level"] = lvl + 1
         return d
 
     _update_work_data(user_id, _promote)
