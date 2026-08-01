@@ -892,7 +892,6 @@ class GamesCog(commands.Cog):
         await interaction.followup.send(embed=embed)
 
     # ==================== UTILITY COMMANDS ====================
-    
     @app_commands.command(name="help", description="Xem danh sách lệnh của bot")
     async def help(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -904,68 +903,6 @@ class GamesCog(commands.Cog):
             
         view = HelpView(pages)
         await interaction.followup.send(embed=pages[0], view=view)
-
-    @app_commands.command(name="mango-mustard-day", description="Kiểm tra thông tin sự kiện Mango Mustard Day")
-    async def mango_mustard_day(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-
-        event_date = datetime.datetime.strptime(
-            config.MANGO_MUSTARD_DAY["date"], "%Y-%m-%d"
-        ).replace(tzinfo=datetime.timezone.utc)
-
-        embed = discord.Embed(
-            title="🌭 Mango Mustard Day 2026 🥭",
-            description="Sự kiện đặc biệt của server!",
-            color=discord.Color.gold()
-        )
-
-        # Check if event has started
-        now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
-        if now >= event_date:
-            embed.add_field(
-                name="📅 Trạng thái",
-                value="🟢 Sự kiện **đang diễn ra**!",
-                inline=False
-            )
-            embed.add_field(
-                name="🎯 Cách tham gia",
-                value=f"Gõ `{config.MANGO_MUSTARD_DAY['trigger_phrase']}` trong bất kỳ kênh nào để nhận thưởng!",
-                inline=False
-            )
-        else:
-            embed.add_field(
-                name="📅 Trạng thái",
-                value=f"⏳ Sự kiện sẽ diễn ra vào <t:{int(event_date.timestamp())}:R>",
-                inline=False
-            )
-
-        embed.add_field(
-            name="🎁 Phần thưởng",
-            value=f"**{config.MANGO_MUSTARD_DAY['reward_mango']} 🥭** + **{config.MANGO_MUSTARD_DAY['reward_plus']} 🥭+**",
-            inline=True
-        )
-        embed.add_field(
-            name="👤 Yêu cầu",
-            value="Mỗi người chỉ được nhận **1 lần duy nhất**",
-            inline=True
-        )
-
-        # Check if user has claimed
-        if store.has_claimed_mango_mustard_day(interaction.user.id):
-            embed.add_field(
-                name="✅ Trạng thái của bạn",
-                value="Bạn đã nhận thưởng thành công! 🎉",
-                inline=False
-            )
-        else:
-            embed.add_field(
-                name="⏳ Trạng thái của bạn",
-                value="Bạn chưa nhận thưởng! Hãy tham gia ngay!",
-                inline=False
-            )
-
-        embed.set_footer(text=f"ID sự kiện: {int(event_date.timestamp())}")
-        await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="meme-count", description="Xem số lượng meme bạn đã gửi")
     @app_commands.describe(user="Người muốn xem (mặc định: bạn)")
@@ -1161,10 +1098,6 @@ class GamesCog(commands.Cog):
         if message.channel.id == config.MEME_CONFIG["channel_id"]:
             await self._handle_meme_message(message)
 
-        # Mango Mustard Day
-        if store.is_mango_mustard_day():
-            await self._handle_mango_mustard_day(message)
-
     async def _handle_meme_message(self, message: discord.Message):
         content_lower = message.content.lower()
         has_link = any(kw in content_lower for kw in (
@@ -1208,81 +1141,6 @@ class GamesCog(commands.Cog):
                     print(f"Bot thiếu quyền thêm role {role_id} cho user {user.id}")
                 except discord.HTTPException as e:
                     print(f"Lỗi khi thêm role: {e}")
-
-    async def _handle_mango_mustard_day(self, message: discord.Message):
-        if message.author.bot:
-            return
-
-        trigger = config.MANGO_MUSTARD_DAY["trigger_phrase"]
-        user_input = " ".join(message.content.lower().split())
-        trigger_lower = " ".join(trigger.lower().split())
-
-        if user_input != trigger_lower:
-            return
-
-        if not store.is_mango_mustard_day():
-            event_date = datetime.datetime.strptime(
-                config.MANGO_MUSTARD_DAY["date"], "%Y-%m-%d"
-            ).replace(tzinfo=datetime.timezone.utc)
-        
-            await message.reply(
-                f"🌭 Sự kiện Ngày Mù Tạt sẽ diễn ra vào <t:{int(event_date.timestamp())}:R>! "
-                f"Hãy quay lại vào ngày đó!",
-                delete_after=15
-            )
-            return
-    
-        user = message.author
-
-        if store.has_claimed_mango_mustard_day(user.id):
-            await message.reply(
-                "🌭 Bạn đã nhận thưởng Ngày Mù Tạt rồi! Hãy chờ năm sau 🥭",
-                delete_after=10,
-            )
-            return
-
-        success = store.claim_mango_mustard_day(user.id)
-        if success:
-            reward_mango = config.MANGO_MUSTARD_DAY["reward_mango"]
-            reward_plus = config.MANGO_MUSTARD_DAY["reward_plus"]
-            event_date = datetime.datetime.strptime(
-                config.MANGO_MUSTARD_DAY["date"], "%Y-%m-%d"
-            ).replace(tzinfo=datetime.timezone.utc)
-
-            embed = discord.Embed(
-                title="🌭 **NGÀY MÙ TẠT** 🥭",
-                description=f"🎉 {user.mention} đã tham gia Ngày Mù Tạt thành công!",
-                color=discord.Color.gold(),
-            )
-            embed.add_field(
-                name="Phần thưởng nhận được",
-                value=f"**{reward_mango} 🥭** và **{reward_plus} 🥭+**",
-                inline=True
-            )
-            embed.add_field(
-                name="Ngày sự kiện",
-                value=f"<t:{int(event_date.timestamp())}:R>",
-                inline=True
-            )
-            embed.set_footer(text="🎊 Chúc mừng bạn đã nhận được phần thưởng đặc biệt!")
-
-            role_id = config.MANGO_MUSTARD_DAY["event_role_id"]
-            role = message.guild.get_role(role_id)
-            if role and role not in user.roles:
-                try:
-                    await user.add_roles(role, reason="Mango Mustard Day 2026 Participant")
-                except discord.Forbidden:
-                    print(f"Không thể thêm role {role_id} cho user {user.id}")
-
-            await message.reply(
-                content=f"<@&{role_id}> 🎊 Chúc mừng {user.mention}!",
-                embed=embed
-            )
-        else:
-            await message.reply(
-                "❌ Có lỗi xảy ra khi nhận thưởng, vui lòng thử lại hoặc liên hệ admin.",
-                delete_after=10,
-            )
 
 # ==================== UI COMPONENTS ====================
 class CompanyChooseView(discord.ui.View):

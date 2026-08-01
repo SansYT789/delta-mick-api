@@ -1,17 +1,9 @@
-MANGO_MUSTARD_DAY = {
-    "date": "2026-08-01",  # Ngày diễn ra sự kiện
-    "event_role_id": 1531564795231207424,  # ID role ping
-    "trigger_phrase": "Ngày mù tạt",  # Câu để kích hoạt
-    "reward_mango": 367,  # Phần thưởng mango
-    "reward_plus": 36,  # Phần thưởng mango+
-}
-
 # Meme Achievement
 MEME_CONFIG = {
     "channel_id": 1528562696398831616,  # Kênh meme
     "role_id": 1529765560433381427,  # Role thưởng
     "required_count": 20,  # Số meme cần đạt
-    "cooldown_minutes": 5,  # Thời gian giữa các lần kiểm tra (phút)
+    "cooldown_minutes": 2,  # Thời gian giữa các lần kiểm tra (phút)
 }
 
 COMPANIES = {
@@ -71,7 +63,7 @@ COMPANIES = {
 
 MAX_POSITION_LEVEL = 9         # 0..9: lao công -> ... -> chủ tịch
 POSITION_NAMES = [
-    "Lao công",
+    "Thực tập sinh",
     "Nhân viên",
     "Nhân viên cấp cao",
     "Trưởng nhóm",
