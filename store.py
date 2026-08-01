@@ -659,29 +659,57 @@ def submit_wordle_guess(user_id: int, guess: str) -> dict:
     ref.transaction(_txn)
     return result_holder
 
-# Mango Mustard Day
+# Mustard Day
 def has_claimed_mango_mustard_day(user_id: int) -> bool:
-    ref = db.reference(f"users/{user_id}/mango_mustard_day_claimed")
+    ref = db.reference(f"users/{user_id}/mustard_day_claimed")
     return ref.get() == True
 
 def claim_mango_mustard_day(user_id: int) -> bool:
-    ref = db.reference(f"users/{user_id}/mango_mustard_day_claimed")
+    user_ref = db.reference(f"users/{user_id}")
+    
+    user_data = user_ref.get()
+    if user_data is None:
+        user_data = {}
     
     # Kiểm tra đã claim chưa
-    if ref.get():
+    if user_data.get("mustard_day_claimed", False):
         return False
     
-    # Cộng thưởng
-    transaction_mango(user_id, config.MANGO_MUSTARD_DAY["reward_mango"])
-    transaction_mango(user_id, config.MANGO_MUSTARD_DAY["reward_plus"], use_plus=True)
+    # Kiểm tra sự kiện đang diễn ra
+    if not is_mango_mustard_day():
+        return False
     
-    # Đánh dấu đã claim
-    ref.set(True)
-    return True
+    # Lấy số dư hiện tại
+    current_mango = user_data.get("mango", 0)
+    current_plus = user_data.get("mango_plus", 0)
+    
+    # Tính số dư mới
+    reward_mango = config.MANGO_MUSTARD_DAY["reward_mango"]
+    reward_plus = config.MANGO_MUSTARD_DAY["reward_plus"]
+    
+    new_mango = current_mango + reward_mango
+    new_plus = current_plus + reward_plus
+
+    updates = {
+        "mango": new_mango,
+        "mango_plus": new_plus,
+        "mustard_day_claimed": True,
+        "last_claim_time": datetime.datetime.utcnow().isoformat()
+    }
+
+    try:
+        user_ref.update(updates)
+        return True
+    except Exception as e:
+        print(f"Lỗi khi nhận: {e}")
+        return False
 
 def is_mango_mustard_day() -> bool:
-    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-    return today == config.MANGO_MUSTARD_DAY["date"]
+    today = datetime.datetime.utcnow().date()
+    event_date = datetime.datetime.strptime(
+        config.MANGO_MUSTARD_DAY["date"], "%Y-%m-%d"
+    ).date()
+    return today == event_date
 
 # ===== Meme Achievement =====
 def get_meme_count(user_id: int) -> int:
@@ -703,7 +731,7 @@ def increment_meme_count(user_id: int) -> int:
             return new_count
         return new_count
     except Exception as e:
-        print(f"Lỗi increment_meme_count: {e}")
+        print(f"Lỗi tăng số lượng meme: {e}")
         return 0
 
 def has_meme_role(user_id: int, guild_id: int) -> bool:

@@ -1,7 +1,7 @@
 MANGO_MUSTARD_DAY = {
     "date": "2026-08-01",  # Ngày diễn ra sự kiện
     "event_role_id": 1531564795231207424,  # ID role ping
-    "trigger_phrase": "Mango Mustard Day!!",  # Câu để kích hoạt
+    "trigger_phrase": "Ngày mù tạt",  # Câu để kích hoạt
     "reward_mango": 367,  # Phần thưởng mango
     "reward_plus": 36,  # Phần thưởng mango+
 }

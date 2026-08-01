@@ -255,7 +255,7 @@ class GamesCog(commands.Cog):
 
         if current_level >= config.MAX_POSITION_LEVEL:
             await interaction.response.send_message(
-                "**{user.display_name}** đã đạt chức vụ cao nhất: **{config.POSITION_NAMES[-1]}**", ephemeral=True
+                f"**{user.display_name}** đã đạt chức vụ cao nhất: **{config.POSITION_NAMES[-1]}**", ephemeral=True
             )
             return
 
@@ -1210,15 +1210,33 @@ class GamesCog(commands.Cog):
                     print(f"Lỗi khi thêm role: {e}")
 
     async def _handle_mango_mustard_day(self, message: discord.Message):
-        content = message.content.upper()
-        if content != config.MANGO_MUSTARD_DAY["trigger_phrase"].upper():
+        if message.author.bot:
             return
 
+        trigger = config.MANGO_MUSTARD_DAY["trigger_phrase"]
+        user_input = " ".join(message.content.lower().split())
+        trigger_lower = " ".join(trigger.lower().split())
+
+        if user_input != trigger_lower:
+            return
+
+        if not store.is_mango_mustard_day():
+            event_date = datetime.datetime.strptime(
+                config.MANGO_MUSTARD_DAY["date"], "%Y-%m-%d"
+            ).replace(tzinfo=datetime.timezone.utc)
+        
+            await message.reply(
+                f"🌭 Sự kiện Ngày Mù Tạt sẽ diễn ra vào <t:{int(event_date.timestamp())}:R>! "
+                f"Hãy quay lại vào ngày đó!",
+                delete_after=15
+            )
+            return
+    
         user = message.author
 
         if store.has_claimed_mango_mustard_day(user.id):
             await message.reply(
-                "🌭 Bạn đã nhận thưởng Mango Mustard Day rồi! Hãy chờ năm sau nhé 🥭",
+                "🌭 Bạn đã nhận thưởng Ngày Mù Tạt rồi! Hãy chờ năm sau 🥭",
                 delete_after=10,
             )
             return
@@ -1227,10 +1245,13 @@ class GamesCog(commands.Cog):
         if success:
             reward_mango = config.MANGO_MUSTARD_DAY["reward_mango"]
             reward_plus = config.MANGO_MUSTARD_DAY["reward_plus"]
+            event_date = datetime.datetime.strptime(
+                config.MANGO_MUSTARD_DAY["date"], "%Y-%m-%d"
+            ).replace(tzinfo=datetime.timezone.utc)
 
             embed = discord.Embed(
-                title="🌭 **Mango Mustard Day!!** 🥭",
-                description=f"🎉 {user.mention} đã tham gia Mango Mustard Day thành công!",
+                title="🌭 **NGÀY MÙ TẠT** 🥭",
+                description=f"🎉 {user.mention} đã tham gia Ngày Mù Tạt thành công!",
                 color=discord.Color.gold(),
             )
             embed.add_field(
@@ -1240,20 +1261,23 @@ class GamesCog(commands.Cog):
             )
             embed.add_field(
                 name="Ngày sự kiện",
-                value="<t:1785553200:R>",
+                value=f"<t:{int(event_date.timestamp())}:R>",
                 inline=True
             )
-            embed.set_footer(text="Mango Mustard Day - 1/8/2026")
+            embed.set_footer(text="🎊 Chúc mừng bạn đã nhận được phần thưởng đặc biệt!")
 
             role_id = config.MANGO_MUSTARD_DAY["event_role_id"]
-            await message.reply(content=f"<@&{role_id}>", embed=embed)
+            role = message.guild.get_role(role_id)
+            if role and role not in user.roles:
+                try:
+                    await user.add_roles(role, reason="Mango Mustard Day 2026 Participant")
+                except discord.Forbidden:
+                    print(f"Không thể thêm role {role_id} cho user {user.id}")
 
-            try:
-                role = message.guild.get_role(role_id)
-                if role and role not in user.roles:
-                    await user.add_roles(role, reason="Mango Mustard Day Participant")
-            except discord.Forbidden:
-                pass
+            await message.reply(
+                content=f"<@&{role_id}> 🎊 Chúc mừng {user.mention}!",
+                embed=embed
+            )
         else:
             await message.reply(
                 "❌ Có lỗi xảy ra khi nhận thưởng, vui lòng thử lại hoặc liên hệ admin.",
