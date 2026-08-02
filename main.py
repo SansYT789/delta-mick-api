@@ -64,6 +64,7 @@ async def main():
     async with bot:
         await bot.load_extension("games")
         await bot.load_extension("games1")
+        await bot.load_extension("games2")
         await bot.start(os.environ["TOKEN"])
 
 if __name__ == "__main__":
