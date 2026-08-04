@@ -557,7 +557,7 @@ class GamesCog(commands.Cog):
 
         view = discord.ui.View(timeout=300)
         view.add_item(FlagModeDropdown(interaction.user.id))
-        await interaction.response.send_message("Chọn độ khó để bắt đầu đoán cờ:", view=view, ephemeral=True)
+        await interaction.response.send_message("Chọn độ khó để bắt đầu đoán cờ:", view=view)
 
     @app_commands.command(name="wordle-stats", description="Xem thống kê trò chơi đoán từ của bạn")
     @app_commands.describe(user="Người chơi cần xem (mặc định: bạn)")
@@ -1545,7 +1545,7 @@ class FlagModeDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.owner_id:
-            await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
+            await interaction.response.send_message("Không phải ván của bạn.", ephemeral=True)
             return
 
         mode = self.values[0]
