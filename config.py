@@ -3,16 +3,6 @@ BOT_OWNER_ID = {985004175110848512}
 MAX_LOG_ENTRIES = 10
 LIXI_DURATION_MIN = 10
 
-WORK_COOLDOWN_HOURS = 24
-STREAK_BONUS_PER_WEEK = 0.02   # +2%/tuần
-
-WORDLE_MAX_GUESSES = 5
-WORDLE_DAILY_LIMIT = 6
-WORDLE_WIN_REWARD = 20
-
-WORDLE_WIN_STREAK_REQUIRED = 5
-WORDLE_TOTAL_WINS_REQUIRED = 12
-
 # Meme Achievement
 MEME_CONFIG = {
     "channel_id": 1528562696398831616,  # Kênh meme
@@ -20,6 +10,9 @@ MEME_CONFIG = {
     "required_count": 20,  # Số meme cần đạt
     "cooldown_minutes": 2,  # Thời gian giữa các lần kiểm tra (phút)
 }
+
+WORK_COOLDOWN_HOURS = 24
+STREAK_BONUS_PER_WEEK = 0.02   # +2%/tuần
 
 COMPANIES = {
     "delta": {
@@ -187,6 +180,13 @@ _FORTUNES = [
     {"title": "🌟 Ngôi sao ẩn danh", "desc": "Tài năng thực sự chưa ai phát hiện — hoặc phát hiện rồi mà chưa dám nói.", "weight": 6},
 ]
 
+WORDLE_MAX_GUESSES = 5
+WORDLE_DAILY_LIMIT = 6
+WORDLE_WIN_REWARD = 20
+
+WORDLE_WIN_STREAK_REQUIRED = 5
+WORDLE_TOTAL_WINS_REQUIRED = 12
+
 WORDLE_WORDS = [
     "APPLE", "BRAVE", "CHESS", "DANCE", "EAGLE", "FLAME", "GRAPE", "HOUSE", "IMAGE", "JOKER",
     "KNIFE", "LEMON", "MONEY", "NIGHT", "OCEAN", "PIANO", "QUIET", "RIVER", "STONE", "TIGER",
@@ -230,39 +230,45 @@ FLAG_STREAK_REQUIRED = 15          # tổng số CÂU đúng cần đạt
 FLAG_STREAK_WINDOW_GAMES = 3       # trong tối đa 3 ván liên tiếp
 FLAG_STREAK_MIN_MODE_ORDER = 2     # chỉ tính khi mode >= "medium"
 
-FLAG_MODE_ORDER = ["easy", "normal", "medium", "hard", "insane"]
+FLAG_MODE_ORDER = ["easy", "normal", "medium", "hard", "insane", "impossible"]
 
 FLAG_COUNTRIES = {
     "easy": [
         ("Việt Nam", "vn", ["viet nam", "vietnam"]),
         ("Mỹ", "us", ["my", "hoa ky", "usa", "united states"]),
-        ("Nhật Bản", "jp", ["nhat ban", "nhat", "japan"]),
-        ("Hàn Quốc", "kr", ["han quoc", "korea", "south korea"]),
+        ("Nhật Bản", "jp", ["nhat ban", "nhat", "japan", "nhật"]),
+        ("Hàn Quốc", "kr", ["han quoc", "han", "korea", "south korea", "hàn"]),
         ("Trung Quốc", "cn", ["trung quoc", "china"]),
         ("Anh", "gb", ["anh", "uk", "united kingdom", "england"]),
         ("Pháp", "fr", ["phap", "france"]),
         ("Đức", "de", ["duc", "germany"]),
-        ("Thái Lan", "th", ["thai lan", "thailand"]),
+        ("Thái Lan", "th", ["thai lan", "thailand", "thai", "thái"]),
         ("Canada", "ca", ["canada"]),
+        ("Úc", "au", ["uc", "australia"]),
+        ("Ấn Độ", "in", ["an do", "india", "an", "ấn"]),
     ],
     "normal": [
         ("Nga", "ru", ["nga", "russia"]),
         ("Ý", "it", ["y", "italy", "italia"]),
         ("Tây Ban Nha", "es", ["tay ban nha", "spain"]),
         ("Brazil", "br", ["brazil", "brasil"]),
-        ("Úc", "au", ["uc", "australia"]),
-        ("Ấn Độ", "in", ["an do", "india"]),
         ("Mexico", "mx", ["mexico"]),
         ("Indonesia", "id", ["indonesia"]),
         ("Singapore", "sg", ["singapore"]),
-        ("Malaysia", "my", ["malaysia"]),
+        ("Malaysia", "my", ["malaysia", "ma lay", "mã lay"]),
         ("Bỉ", "be", ["bi", "belgium"]),
         ("Đan Mạch", "dk", ["dan mach", "denmark"]),
         ("Áo", "at", ["ao", "austria"]),
         ("Hungary", "hu", ["hungary"]),
-        ("Cộng hòa Séc", "cz", ["cong hoa sec", "czech", "czechia"]),
+        ("Cộng hòa Séc", "cz", ["cong hoa sec", "czech", "czechia", "sec", "séc"]),
         ("Peru", "pe", ["peru"]),
         ("Venezuela", "ve", ["venezuela"]),
+        ("Pakistan", "pk", ["pakistan"]),
+        ("Ai Cập", "eg", ["ai cap", "egypt"]),
+        ("Argentina", "ar", ["argentina"]),
+        ("Israel", "il", ["israel"]),
+        ("Ả Rập", "sa", ["saudi", "saudi arabia", "a rap"]),
+        ("UAE", "ae", ["uae", "united arab emirates", "các tiểu vương quốc", "uae"]),
     ],
     "medium": [
         ("Thụy Điển", "se", ["thuy dien", "sweden"]),
@@ -271,9 +277,7 @@ FLAG_COUNTRIES = {
         ("Bồ Đào Nha", "pt", ["bo dao nha", "portugal"]),
         ("Ba Lan", "pl", ["ba lan", "poland"]),
         ("Thổ Nhĩ Kỳ", "tr", ["tho nhi ky", "turkey"]),
-        ("Ai Cập", "eg", ["ai cap", "egypt"]),
-        ("Argentina", "ar", ["argentina"]),
-        ("Philippines", "ph", ["philippines"]),
+        ("Philippines", "ph", ["philippines", "philippine", "phi lip pin", "phi líp pin", "phi-lip-pin", "phi-líp-pin", "phi lip pines"]),
         ("New Zealand", "nz", ["new zealand"]),
         ("Thụy Sĩ", "ch", ["thuy si", "switzerland"]),
         ("Ireland", "ie", ["ireland"]),
@@ -284,27 +288,32 @@ FLAG_COUNTRIES = {
         ("Cuba", "cu", ["cuba"]),
         ("Ecuador", "ec", ["ecuador"]),
         ("Guatemala", "gt", ["guatemala"]),
-        ("Myanmar", "mm", ["myanmar", "burma"]),
-        ("Campuchia", "kh", ["campuchia", "cambodia"]),
+        ("Miến Điện", "mm", ["myanmar", "burma", "mien dien"]),
+        ("Campuchia", "kh", ["campuchia", "cambodia", "chich dien", "kampuchea"]),
         ("Lào", "la", ["lao", "laos"]),
         ("Mông Cổ", "mn", ["mong co", "mongolia"]),
+        ("Iran", "ir", ["iran", "ba tư"]),
+        ("Iraq", "iq", ["iraq"]),
+        ("Syria", "sy", ["syria"]),
+        ("Nepal", "np", ["nepal"]),
+        ("Bangladesh", "bd", ["bangladesh"]),
+        ("Sri Lanka", "lk", ["sri lanka", "tích lan"]),
     ],
     "hard": [
         ("Phần Lan", "fi", ["phan lan", "finland"]),
         ("Hy Lạp", "gr", ["hy lap", "greece"]),
-        ("Ukraine", "ua", ["ukraine"]),
+        ("Ukraine", "ua", ["ukraine", "u rai na", "u-rai-na", "u crai na", "u-crai-na", "ucraina"]),
         ("Chile", "cl", ["chile"]),
         ("Colombia", "co", ["colombia"]),
         ("Kenya", "ke", ["kenya"]),
         ("Maroc", "ma", ["maroc", "morocco"]),
-        ("Pakistan", "pk", ["pakistan"]),
         ("Iceland", "is", ["iceland"]),
         ("Croatia", "hr", ["croatia"]),
         ("Albania", "al", ["albania"]),
         ("Armenia", "am", ["armenia"]),
         ("Azerbaijan", "az", ["azerbaijan"]),
         ("Belarus", "by", ["belarus"]),
-        ("Bosnia", "ba", ["bosnia", "bosnia herzegovina"]),
+        ("Bosnia", "ba", ["bosnia", "bosnia herzegovina", "bosnia and herzegovina", "bosnia va herzegovina", "bosnia và herzegovina"]),
         ("Estonia", "ee", ["estonia"]),
         ("Latvia", "lv", ["latvia"]),
         ("Lithuania", "lt", ["lithuania"]),
@@ -323,6 +332,19 @@ FLAG_COUNTRIES = {
         ("Nigeria", "ng", ["nigeria"]),
         ("Ghana", "gh", ["ghana"]),
         ("Uganda", "ug", ["uganda"]),
+        ("Angola", "ao", ["angola"]),
+        ("Cameroon", "cm", ["cameroon"]),
+        ("Bờ Biển Ngà", "ci", ["bo bien nga", "ivory coast"]),
+        ("Ethiopia", "et", ["ethiopia"]),
+        ("Tanzania", "tz", ["tanzania"]),
+        ("Sudan", "sd", ["sudan"]),
+        ("Libya", "ly", ["libya"]),
+        ("Somalia", "so", ["somalia"]),
+        ("Afghanistan", "af", ["afghanistan"]),
+        ("Yemen", "ye", ["yemen"]),
+        ("Bolivia", "bo", ["bolivia"]),
+        ("Paraguay", "py", ["paraguay"]),
+        ("Uruguay", "uy", ["uruguay"]),
     ],
     "insane": [
         ("Bhutan", "bt", ["bhutan"]),
@@ -346,14 +368,14 @@ FLAG_COUNTRIES = {
         ("Tonga", "to", ["tonga"]),
         ("Kiribati", "ki", ["kiribati"]),
         ("Micronesia", "fm", ["micronesia"]),
-        ("Marshall", "mh", ["marshall", "marshall islands"]),
+        ("Quần đảo Marshall", "mh", ["marshall", "marshall islands", "quan dao marshall"]),
         ("Solomon", "sb", ["solomon", "solomon islands"]),
         ("Comoros", "km", ["comoros"]),
         ("Seychelles", "sc", ["seychelles"]),
         ("Mauritius", "mu", ["mauritius"]),
         ("Moldova", "md", ["moldova"]),
         ("Montenegro", "me", ["montenegro"]),
-        ("North Macedonia", "mk", ["north macedonia", "macedonia"]),
+        ("Bắc Macedonia", "mk", ["north macedonia", "macedonia", "bac macedonia"]),
         ("Timor-Leste", "tl", ["timor", "east timor"]),
         ("Brunei", "bn", ["brunei"]),
         ("Bahamas", "bs", ["bahamas"]),
@@ -361,9 +383,79 @@ FLAG_COUNTRIES = {
         ("Belize", "bz", ["belize"]),
         ("Guyana", "gy", ["guyana"]),
         ("Jamaica", "jm", ["jamaica"]),
-        ("Trinidad", "tt", ["trinidad", "trinidad tobago"]),
+        ("Trinidad và Tobago", "tt", ["trinidad", "trinidad tobago", "trinidad va tobago", "trinidad and tobago"]),
+        ("Cabo Verde", "cv", ["cape verde", "cabo verde"]),
+        ("Sao Tome và Principe", "st", ["sao tome", "sao tome and principe", "sao tome va principe"]),
+        ("St. Kitts và Nevis", "kn", ["st kitts", "saint kitts", "st kitts va nevis"]),
+        ("St. Lucia", "lc", ["st lucia", "saint lucia"]),
+        ("St. Vincent", "vc", ["st vincent", "saint vincent"]),
+        ("Grenada", "gd", ["grenada"]),
+        ("Antigua và Barbuda", "ag", ["antigua", "antigua barbuda"]),
+        ("Dominica", "dm", ["dominica"]),
+        ("Botswana", "bw", ["botswana"]),
+        ("Burkina Faso", "bf", ["burkina", "burkina faso"]),
+        ("Burundi", "bi", ["burundi"]),
+        ("Chad", "td", ["chad"]),
+        ("Congo", "cg", ["congo"]),
+        ("DRC", "cd", ["drc", "democratic republic of congo", "congo"]),
+        ("Gabon", "ga", ["gabon"]),
+        ("Gambia", "gm", ["gambia"]),
+        ("Guinea", "gn", ["guinea"]),
+        ("Liberia", "lr", ["liberia"]),
+        ("Madagascar", "mg", ["madagascar"]),
+        ("Malawi", "mw", ["malawi"]),
+        ("Mali", "ml", ["mali"]),
+        ("Mauritania", "mr", ["mauritania"]),
+        ("Mozambique", "mz", ["mozambique"]),
+        ("Namibia", "na", ["namibia"]),
+        ("Niger", "ne", ["niger"]),
+        ("Rwanda", "rw", ["rwanda"]),
+        ("Senegal", "sn", ["senegal"]),
+        ("Sierra Leone", "sl", ["sierra leone"]),
+        ("Togo", "tg", ["togo"]),
+        ("Zambia", "zm", ["zambia"]),
+        ("Zimbabwe", "zw", ["zimbabwe"]),
+        ("Costa Rica", "cr", ["costa rica"]),
+        ("Panama", "pa", ["panama"]),
+        ("Honduras", "hn", ["honduras"]),
+        ("Nicaragua", "ni", ["nicaragua"]),
+        ("El Salvador", "sv", ["el salvador"]),
+        ("Haiti", "ht", ["haiti"]),
+        ("Cộng hoà Dominica", "do", ["dominican republic", "cộng hòa dominica"]),
+        ("Bahrain", "bh", ["bahrain"]),
+        ("Síp", "cy", ["cyprus", "síp"]),
+        ("Luxembourg", "lu", ["luxembourg"]),
+        ("Malta", "mt", ["malta"]),
+    ],
+    "impossible": [
+        ("Nauru", "nr", ["nauru"]),
+        ("Niue", "nu", ["niue"]),
+        ("Cook", "ck", ["cook", "cook islands"]),
+        ("Tokelau", "tk", ["tokelau"]),
+        ("Wallis và Futuna", "wf", ["wallis", "futuna"]),
+        ("Saint Helena", "sh", ["st helena", "saint helena"]),
+        ("Falkland", "fk", ["falkland", "falkland islands"]),
+        ("Gibraltar", "gi", ["gibraltar"]),
+        ("Bermuda", "bm", ["bermuda"]),
+        ("Cayman", "ky", ["cayman", "cayman islands"]),
+        ("Virgin thuộc Anh", "vg", ["british virgin", "virgin islands", "virgin thuoc anh"]),
+        ("Virgin thuộc Mỹ", "vi", ["us virgin", "virgin islands", "virgin thuoc my"]),
+        ("Aruba", "aw", ["aruba"]),
+        ("Curacao", "cw", ["curacao"]),
+        ("Sint Maarten", "sx", ["sint maarten"]),
+        ("Saint Martin", "mf", ["st martin", "saint martin"]),
+        ("Saint Pierre", "pm", ["st pierre", "saint pierre"]),
+        ("Montserrat", "ms", ["montserrat"]),
+        ("Anguilla", "ai", ["anguilla"]),
+        ("Turks và Caicos", "tc", ["turks", "caicos"]),
+        ("Pitcairn", "pn", ["pitcairn"]),
+        ("Norfolk", "nf", ["norfolk"]),
+        ("Christmas", "cx", ["christmas"]),
+        ("Cocos", "cc", ["cocos"]),
+        ("Heard và McDonald", "hm", ["heard", "mcdonald", "heard va mcdonald"]),
+        ("Antarctica", "aq", ["antarctica"]),
     ],
 }
 
-FLAG_MODE_REWARD_PER_QUESTION = {"easy": 5, "normal": 8, "medium": 12, "hard": 18, "insane": 30}
-FLAG_MODE_NAMES = {"easy": "Dễ", "normal": "Bình thường", "medium": "Trung bình", "hard": "Khó", "insane": "Điên cuồng"}
+FLAG_MODE_REWARD_PER_QUESTION = {"easy": 5, "normal": 8, "medium": 12, "hard": 18, "insane": 25, "impossible": 40}
+FLAG_MODE_NAMES = {"easy": "🟢 Dễ", "normal": "🔵 Thường", "medium": "🟡 Trung bình", "hard": "🟠 Khó", "insane": "🔴 Ác mộng", "impossible": "💀 Bất khả thi"}
