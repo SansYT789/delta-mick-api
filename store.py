@@ -7,17 +7,10 @@ from firebase_admin import db
 
 import config
 
-OWNER_IDS = {985004175110848512}
-MAX_LOG_ENTRIES = 10
-LIXI_DURATION_MIN = 10
-
-MANGO_TO_PLUS_RATE = 0.1       # 1 mango -> 0.1 mango+
-PLUS_TO_MANGO_RATE = 7         # 1 mango+ -> 7 mango
-
-WORK_COOLDOWN_HOURS = 24
-STREAK_BONUS_PER_WEEK = 0.02   # +2%/tuần
-
 # Utility
+def is_owner(user_id: int) -> bool:
+    return user_id in config.BOT_OWNER_ID
+
 def now_iso() -> str:
     return datetime.datetime.utcnow().isoformat()
 
@@ -30,22 +23,15 @@ def parse_iso(s: str) -> datetime.datetime:
         s = s + '+00:00'
     return datetime.datetime.fromisoformat(s)
 
-def _mango_ref(user_id: int):
-    return db.reference(f"users/{user_id}/mango")
+def _coins_ref(user_id: int):
+    return db.reference(f"users/{user_id}/coins")
 
-def _mango_plus_ref(user_id: int):
-    return db.reference(f"users/{user_id}/mango_plus")
-
-def get_mango(user_id: int) -> int:
-    val = _mango_ref(user_id).get()
+def get_coins(user_id: int) -> int:
+    val = _coins_ref(user_id).get()
     return val or 0
 
-def get_mango_plus(user_id: int) -> int:
-    val = _mango_plus_ref(user_id).get()
-    return val or 0
-
-def transaction_mango(user_id: int, delta: int, use_plus: bool = False):
-    ref = _mango_plus_ref(user_id) if use_plus else _mango_ref(user_id)
+def transaction_coins(user_id: int, delta: int):
+    ref = _coins_ref(user_id)
     failed = {"insufficient": False}
 
     def _txn(current):
@@ -61,69 +47,26 @@ def transaction_mango(user_id: int, delta: int, use_plus: bool = False):
         return None
     return result
 
-def convert_mango_to_plus(user_id: int, mango_amount: int) -> tuple[bool, str, int]:
-    if mango_amount <= 0:
-        return False, "Số lượng phải lớn hơn 0.", 0
-
-    plus_gained = int(mango_amount * MANGO_TO_PLUS_RATE)
-    if plus_gained <= 0:
-        return False, f"Cần ít nhất {int(1 / MANGO_TO_PLUS_RATE)} 🥭 để đổi được 1 mango+.", 0
-
-    new_mango_balance = transaction_mango(user_id, -mango_amount)
-    if new_mango_balance is None:
-        return False, "Không đủ mango.", 0
-
-    new_plus_balance = transaction_mango(user_id, plus_gained, use_plus=True)
-    if new_plus_balance is None:
-        transaction_mango(user_id, mango_amount)
-        return False, "Có lỗi xảy ra, giao dịch đã được hoàn tác.", 0
-
-    return True, "", plus_gained
-
-def convert_plus_to_mango(user_id: int, plus_amount: int) -> tuple[bool, str, int]:
-    if plus_amount <= 0:
-        return False, "Số lượng phải lớn hơn 0.", 0
-
-    mango_gained = plus_amount * PLUS_TO_MANGO_RATE
-
-    new_plus_balance = transaction_mango(user_id, -plus_amount, use_plus=True)
-    if new_plus_balance is None:
-        return False, "Không đủ mango+.", 0
-
-    new_mango_balance = transaction_mango(user_id, mango_gained)
-    if new_mango_balance is None:
-        transaction_mango(user_id, plus_amount, use_plus=True)  # hoàn tác
-        return False, "Có lỗi xảy ra, giao dịch đã được hoàn tác.", 0
-
-    return True, "", mango_gained
-
-def spend_mango_and_apply(user_id: int, cost: int, apply_fn, label: str | None = None) -> tuple[bool, str]:
+def spend_coins_and_apply(user_id: int, cost: int, apply_fn, label: str | None = None) -> tuple[bool, str]:
     if cost < 0:
-        raise ValueError("cost phải >= 0")
+        raise ValueError("giá phải lớn hơn hoặc bằng 0")
 
     if cost > 0:
-        new_balance = transaction_mango(user_id, -cost)
+        new_balance = transaction_coins(user_id, -cost)
         if new_balance is None:
-            return False, "Không đủ mango."
-
-    try:
-        transaction_farm_data(user_id, apply_fn)
-    except Exception:
-        if cost > 0:
-            transaction_mango(user_id, cost)  # hoàn tiền
-        return False, "Có lỗi xảy ra khi xử lý, giao dịch đã được hoàn tác."
+            return False, "Không đủ xu."
 
     if label and cost > 0:
-        log_purchase(user_id, label, cost, "mango")
+        log_purchase(user_id, label, cost, "coins")
 
     return True, ""
 
-def set_mango(user_id: int, amount: int):
+def set_coins(user_id: int, amount: int):
     amount = max(0, int(amount))
-    _mango_ref(user_id).set(amount)
+    _coins_ref(user_id).set(amount)
     return amount
 
-def get_all_mango_data() -> dict:
+def get_all_users_data() -> dict:
     return db.reference("users").get() or {}
 
 # Work
@@ -161,7 +104,7 @@ def get_work_cooldown_remaining_sec(user_id: int) -> int:
         if parsed is None:
             return 0
         elapsed = (datetime.datetime.utcnow() - parsed).total_seconds()
-        remaining = WORK_COOLDOWN_HOURS * 3600 - elapsed
+        remaining = config.WORK_COOLDOWN_HOURS * 3600 - elapsed
         return max(0, int(remaining))
     except Exception as e:
         print(f"Error getting cooldown for user {user_id}: {e}")
@@ -256,7 +199,7 @@ def do_work(user_id: int, company_id: str) -> dict:
 
     lo, hi = config.COMPANIES[company_id]["base_pay"]
     base_pay = random.randint(lo, hi)
-    streak_mult = 1.0 + streak_weeks * STREAK_BONUS_PER_WEEK
+    streak_mult = 1.0 + streak_weeks * config.STREAK_BONUS_PER_WEEK
     level = min(position_level, len(config.POSITION_BUFFS)-1)
     position_mult = 1.0 + config.POSITION_BUFFS[level]
     pay = max(1, round(base_pay * streak_mult * position_mult))
@@ -274,11 +217,11 @@ def do_work(user_id: int, company_id: str) -> dict:
 
     _update_work_data(user_id, _apply)
     try:
-        new_balance = transaction_mango(user_id, pay)
+        new_balance = transaction_coins(user_id, pay)
         if new_balance is None:
-            print(f"Warning: transaction_mango returned None for user {user_id}")
+            print(f"Warning: transaction coins returned None for user {user_id}")
     except Exception as e:
-        print(f"Error in transaction_mango: {e}")
+        print(f"Error in transaction coins: {e}")
 
     return {
         "ok": True,
@@ -314,28 +257,22 @@ def _lixi_ref(envelope_id: str | None = None):
         return db.reference(f"lixi/{envelope_id}")
     return db.reference("lixi")
 
-def create_lixi(guild_id: int, channel_id: int, creator_id: int, amount: int, currency: str = "mango") -> tuple[bool, str, str | None]:
-    if currency not in ("mango", "mango_plus"):
-        return False, "Loại tiền tệ không hợp lệ.", None
+def create_lixi(guild_id: int, channel_id: int, creator_id: int, amount: int) -> tuple[bool, str, str | None]:
     if amount <= 0:
         return False, "Số lượng phải lớn hơn 0.", None
 
-    if currency == "mango":
-        new_balance = transaction_mango(creator_id, -amount)
-    else:
-        new_balance = transaction_mango(creator_id, -amount, use_plus=True)
+    new_balance = transaction_coins(creator_id, -amount)
     if new_balance is None:
-        return False, f"Không đủ {'mango' if currency == 'mango' else 'mango+'}.", None
+        return False, f"Không đủ xu.", None
 
     envelope_id = uuid.uuid4().hex[:12]
     now = datetime.datetime.utcnow()
-    expires_at = now + datetime.timedelta(minutes=LIXI_DURATION_MIN)
+    expires_at = now + datetime.timedelta(minutes=config.LIXI_DURATION_MIN)
 
     envelope = {
         "guild_id": guild_id,
         "channel_id": channel_id,
         "creator_id": creator_id,
-        "currency": currency,
         "total_amount": amount,
         "remaining_amount": amount,
         "claimed_by": {},        # {user_id_str: amount}
@@ -352,7 +289,7 @@ def get_lixi(envelope_id: str) -> dict | None:
 
 def claim_lixi(envelope_id: str, user_id: int) -> tuple[bool, str, int]:
     ref = _lixi_ref(envelope_id)
-    result_holder = {"amount": 0, "error": None, "currency": "mango"}
+    result_holder = {"amount": 0, "error": None}
 
     def _txn(envelope):
         if envelope is None:
@@ -392,7 +329,6 @@ def claim_lixi(envelope_id: str, user_id: int) -> tuple[bool, str, int]:
             envelope["closed"] = True
 
         result_holder["amount"] = share
-        result_holder["currency"] = envelope.get("currency", "mango")
         return envelope
 
     ref.transaction(_txn)
@@ -401,15 +337,12 @@ def claim_lixi(envelope_id: str, user_id: int) -> tuple[bool, str, int]:
         return False, result_holder["error"], 0
 
     amount = result_holder["amount"]
-    if result_holder["currency"] == "mango":
-        transaction_mango(user_id, amount)
-    else:
-        transaction_mango(user_id, amount, use_plus=True)
+    transaction_coins(user_id, amount)
     return True, "", amount
 
 def refund_expired_lixi(envelope_id: str) -> int:
     ref = _lixi_ref(envelope_id)
-    result_holder = {"refund": 0, "creator_id": None, "currency": "mango", "already_closed": False}
+    result_holder = {"refund": 0, "creator_id": None, "already_closed": False}
 
     def _txn(envelope):
         if envelope is None:
@@ -421,7 +354,6 @@ def refund_expired_lixi(envelope_id: str) -> int:
         envelope["closed"] = True
         result_holder["refund"] = remaining
         result_holder["creator_id"] = envelope.get("creator_id")
-        result_holder["currency"] = envelope.get("currency", "mango")
         envelope["remaining_amount"] = 0
         return envelope
 
@@ -430,20 +362,16 @@ def refund_expired_lixi(envelope_id: str) -> int:
     refund = result_holder["refund"]
     creator_id = result_holder["creator_id"]
     if refund > 0 and creator_id:
-        if result_holder["currency"] == "mango":
-            transaction_mango(creator_id, refund)
-        else:
-            transaction_mango(creator_id, refund, use_plus=True)
+        transaction_coins(creator_id, refund)
 
     ref.delete()
-
     return refund
 
 # Bill
 def _log_ref(user_id: int):
     return db.reference(f"users/{user_id}/purchase_log")
 
-def log_purchase(user_id: int, label: str, cost: int, currency: str = "mango") -> None:
+def log_purchase(user_id: int, label: str, cost: int, currency: str = "coins") -> None:
     if cost <= 0:
         return # Không log miễn phí
 
@@ -458,8 +386,8 @@ def log_purchase(user_id: int, label: str, cost: int, currency: str = "mango") -
             "currency": currency,
             "at": now_iso(),
         })
-        if len(current) > MAX_LOG_ENTRIES:
-            current = current[-MAX_LOG_ENTRIES:]
+        if len(current) > config.MAX_LOG_ENTRIES:
+            current = current[-config.MAX_LOG_ENTRIES:]
         return current
 
     ref.transaction(_txn)
@@ -470,7 +398,7 @@ def get_purchase_log(user_id: int, limit: int = 20) -> list[dict]:
 
 # Locked
 def _locked_ref():
-    return db.reference("bot_config/locked_commands")
+    return db.reference("bot_config/locked")
 
 def get_locked_commands() -> dict:
     data = _locked_ref().get()
@@ -490,20 +418,9 @@ def unlock_command(command_name: str) -> None:
         current.pop(command_name)
         ref.set(current)
 
-def is_owner(user_id: int) -> bool:
-    return user_id in OWNER_IDS
-
 # Wordle
-WORDLE_MAX_GUESSES = 5
-WORDLE_DAILY_LIMIT = 6
-WORDLE_WIN_REWARD_MANGO = 20
-WORDLE_PARTICIPATE_REWARD_PLUS = 1
-
-WORDLE_WIN_STREAK_REQUIRED = 3
-WORDLE_TOTAL_WINS_REQUIRED = 5
-
 def _wordle_play_ref(user_id: int):
-    return db.reference(f"users/{user_id}/wordle_plays_today")
+    return db.reference(f"users/{user_id}/wordle_plays")
 
 def _wordle_game_ref(user_id: int):
     return db.reference(f"wordle_games/{user_id}")
@@ -527,9 +444,9 @@ def update_wordle_stats(user_id: int, is_win: bool) -> dict:
             current["max_streak"] = max(current.get("max_streak", 0), current["current_streak"])
             
             # check
-            if current["current_streak"] >= WORDLE_WIN_STREAK_REQUIRED:
+            if current["current_streak"] >= config.WORDLE_WIN_STREAK_REQUIRED:
                 result["achievement"] = "streak"
-            elif current["total_wins"] == WORDLE_TOTAL_WINS_REQUIRED:
+            elif current["total_wins"] == config.WORDLE_TOTAL_WINS_REQUIRED:
                 result["achievement"] = "total_wins"
         else:
             current["current_streak"] = 0
@@ -550,8 +467,8 @@ def get_wordle_plays_remaining(user_id: int) -> int:
     today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
     data = _wordle_play_ref(user_id).get() or {}
     if data.get("date") != today:
-        return WORDLE_DAILY_LIMIT
-    return max(0, WORDLE_DAILY_LIMIT - data.get("count", 0))
+        return config.WORDLE_DAILY_LIMIT
+    return max(0, config.WORDLE_DAILY_LIMIT - data.get("count", 0))
 
 def consume_wordle_play(user_id: int) -> bool:
     today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
@@ -562,7 +479,7 @@ def consume_wordle_play(user_id: int) -> bool:
         current = current or {}
         if current.get("date") != today:
             current = {"date": today, "count": 0}
-        if current["count"] >= WORDLE_DAILY_LIMIT:
+        if current["count"] >= config.WORDLE_DAILY_LIMIT:
             result_holder["ok"] = False
             return current
         current["count"] += 1
@@ -595,7 +512,7 @@ def delete_wordle_game(user_id: int) -> None:
 def score_wordle_guess(secret: str, guess: str) -> list[str]:
     """
     Trả về list 5 phần tử: 'correct' (🟩 đúng vị trí), 'present' (🟨 có trong từ, sai vị trí),
-    'absent' (⬜ không có trong từ). Xử lý đúng chuẩn Wordle cho chữ cái lặp lại.
+    'absent' (⬜ không có trong từ).
     """
     secret = secret.upper()
     guess = guess.upper()
@@ -620,7 +537,6 @@ def score_wordle_guess(secret: str, guess: str) -> list[str]:
 
 def submit_wordle_guess(user_id: int, guess: str) -> dict:
     """
-    Trả về dict:
     {status: 'no_game'|'win'|'continue'|'lose', result: [...], guesses_left: int, word: str|None}
     """
     ref = _wordle_game_ref(user_id)
@@ -631,7 +547,7 @@ def submit_wordle_guess(user_id: int, guess: str) -> dict:
             result_holder["status"] = "no_game"
             return game
 
-        if len(game.get("guesses", [])) >= WORDLE_MAX_GUESSES:
+        if len(game.get("guesses", [])) >= config.WORDLE_MAX_GUESSES:
             result_holder["status"] = "no_game"
             return game
 
@@ -640,7 +556,7 @@ def submit_wordle_guess(user_id: int, guess: str) -> dict:
         game.setdefault("guesses", []).append({"word": guess.upper(), "result": score})
 
         is_win = all(r == "correct" for r in score)
-        guesses_left = WORDLE_MAX_GUESSES - len(game["guesses"])
+        guesses_left = config.WORDLE_MAX_GUESSES - len(game["guesses"])
 
         if is_win:
             game["finished"] = True
@@ -679,10 +595,10 @@ def increment_meme_count(user_id: int) -> int:
             return new_count
         return new_count
     except Exception as e:
-        print(f"Lỗi increment_meme_count: {e}")
+        print(f"Lỗi tăng số lượng meme: {e}")
         return 0
 
-def has_meme_role(user_id: int, guild_id: int) -> bool:
+def has_meme_role(user_id: int) -> bool:
     try:
         ref = db.reference(f"users/{user_id}/meme_role_claimed")
         return ref.get() == True
@@ -712,3 +628,183 @@ def reset_meme_counts():
         return True
     except Exception:
         return False
+
+# Flag
+def _flag_game_ref(user_id: int):
+    return db.reference(f"flag_games/{user_id}")
+
+def _flag_stats_ref(user_id: int):
+    return db.reference(f"users/{user_id}/flag_stats")
+
+def _normalize_guess(text: str) -> str:
+    return text.strip().lower()
+
+def get_active_flag_game(user_id: int) -> dict | None:
+    game = _flag_game_ref(user_id).get()
+    if game and not game.get("finished"):
+        return game
+    return None
+
+def create_flag_game(user_id: int, mode: str) -> dict:
+    pool = list(config.FLAG_COUNTRIES[mode])
+    random.shuffle(pool)
+    chosen = pool[:config.FLAG_QUESTIONS_PER_GAME]
+    # nếu nhóm có ít hơn 5 quốc gia
+    while len(chosen) < config.FLAG_QUESTIONS_PER_GAME:
+        chosen.append(random.choice(config.FLAG_COUNTRIES[mode]))
+
+    now = datetime.datetime.utcnow()
+    deadline = (now + datetime.timedelta(seconds=config.FLAG_SECONDS_PER_QUESTION)).isoformat()
+
+    game = {
+        "mode": mode,
+        "questions": [{"country": c[0], "iso_code": c[1]} for c in chosen],
+        "current_index": 0,
+        "current_attempts": 0,
+        "current_deadline": deadline,
+        "correct_count": 0,
+        "answered": [False] * config.FLAG_QUESTIONS_PER_GAME,
+        "created_at": now.isoformat(),
+        "finished": False,
+    }
+    _flag_game_ref(user_id).set(game)
+    return game
+
+def delete_flag_game(user_id: int) -> None:
+    _flag_game_ref(user_id).delete()
+
+def _flag_answer_matches(guess: str, country_name: str, mode: str) -> bool:
+    guess_norm = _normalize_guess(guess)
+    if guess_norm == _normalize_guess(country_name):
+        return True
+    for name, _iso, aliases in config.FLAG_COUNTRIES[mode]:
+        if name == country_name:
+            return guess_norm in [_normalize_guess(a) for a in aliases]
+    return False
+
+def _update_flag_streak(user_id: int, mode: str, correct_count: int) -> dict:
+    ref = _flag_stats_ref(user_id)
+    mode_order = config.FLAG_MODE_ORDER.index(mode)
+    result_holder = {"achieved": False}
+
+    def _txn(stats):
+        stats = stats or {"recent_correct_streak": 0, "streak_role_claimed": False, "games_in_window": 0}
+
+        if mode_order < config.FLAG_STREAK_MIN_MODE_ORDER:
+            stats["recent_correct_streak"] = 0
+            stats["games_in_window"] = 0
+            return stats
+
+        stats["recent_correct_streak"] = stats.get("recent_correct_streak", 0) + correct_count
+        stats["games_in_window"] = stats.get("games_in_window", 0) + 1
+
+        if stats["games_in_window"] > config.FLAG_STREAK_WINDOW_GAMES:
+            stats["recent_correct_streak"] = correct_count
+            stats["games_in_window"] = 1
+
+        if (stats["recent_correct_streak"] >= config.FLAG_STREAK_REQUIRED
+                and not stats.get("streak_role_claimed")
+                and stats["games_in_window"] <= config.FLAG_STREAK_WINDOW_GAMES):
+            stats["streak_role_claimed"] = True
+            result_holder["achieved"] = True
+
+        return stats
+
+    ref.transaction(_txn)
+    return result_holder
+
+def submit_flag_guess(user_id: int, guess: str) -> dict:
+    ref = _flag_game_ref(user_id)
+    result_holder = {
+        "status": "no_game", "question_index": 0, "country": None, "attempts_left": 0,
+        "correct_count": 0, "reward": 0, "is_last_question": False, "mode": None,
+    }
+
+    def _txn(game):
+        if game is None or game.get("finished"):
+            result_holder["status"] = "no_game"
+            return game
+
+        idx = game["current_index"]
+        question = game["questions"][idx]
+        mode = game["mode"]
+        is_last = idx == config.FLAG_QUESTIONS_PER_GAME - 1
+
+        is_correct = _flag_answer_matches(guess, question["country"], mode)
+        game["current_attempts"] += 1
+
+        if is_correct:
+            game["correct_count"] += 1
+            game["answered"][idx] = True
+            result_holder["status"] = "correct"
+            result_holder["reward"] = config.FLAG_MODE_REWARD_PER_QUESTION[mode]
+            _advance_flag_question(game, is_last)
+        elif game["current_attempts"] >= config.FLAG_ATTEMPTS_PER_QUESTION:
+            game["answered"][idx] = True
+            result_holder["status"] = "wrong_final"
+            _advance_flag_question(game, is_last)
+        else:
+            result_holder["status"] = "wrong_retry"
+
+        result_holder["question_index"] = idx
+        result_holder["country"] = question["country"]
+        result_holder["attempts_left"] = max(0, config.FLAG_ATTEMPTS_PER_QUESTION - game["current_attempts"])
+        result_holder["correct_count"] = game["correct_count"]
+        result_holder["is_last_question"] = is_last
+        result_holder["mode"] = mode
+        return game
+
+    ref.transaction(_txn)
+
+    result_holder["streak_achieved"] = False
+    if result_holder["status"] in ("correct", "wrong_final") and result_holder["is_last_question"]:
+        game_after = _flag_game_ref(user_id).get()
+        if game_after and game_after.get("finished"):
+            streak_result = _update_flag_streak(user_id, result_holder["mode"], result_holder["correct_count"])
+            result_holder["streak_achieved"] = streak_result["achieved"]
+
+    return result_holder
+
+def _advance_flag_question(game: dict, is_last: bool) -> None:
+    if is_last:
+        game["finished"] = True
+        return
+    game["current_index"] += 1
+    game["current_attempts"] = 0
+    now = datetime.datetime.utcnow()
+    game["current_deadline"] = (now + datetime.timedelta(seconds=config.FLAG_SECONDS_PER_QUESTION)).isoformat()
+
+def check_and_expire_flag_question(user_id: int) -> dict | None:
+    ref = _flag_game_ref(user_id)
+    result_holder = {"expired": False}
+
+    def _txn(game):
+        if game is None or game.get("finished"):
+            return game
+        deadline = parse_iso(game["current_deadline"])
+        if datetime.datetime.utcnow() < deadline:
+            return game
+
+        idx = game["current_index"]
+        is_last = idx == config.FLAG_QUESTIONS_PER_GAME - 1
+        game["answered"][idx] = True
+        result_holder["expired"] = True
+        result_holder["question_index"] = idx
+        result_holder["country"] = game["questions"][idx]["country"]
+        result_holder["is_last_question"] = is_last
+        result_holder["mode"] = game["mode"]
+        result_holder["correct_count"] = game["correct_count"]
+        _advance_flag_question(game, is_last)
+        return game
+
+    ref.transaction(_txn)
+
+    if not result_holder["expired"]:
+        return None
+
+    if result_holder["is_last_question"]:
+        game_after = ref.get()
+        if game_after and game_after.get("finished"):
+            _update_flag_streak(user_id, result_holder["mode"], result_holder["correct_count"])
+
+    return result_holder

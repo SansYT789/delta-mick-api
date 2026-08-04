@@ -1,3 +1,18 @@
+BOT_OWNER_ID = {985004175110848512}
+
+MAX_LOG_ENTRIES = 10
+LIXI_DURATION_MIN = 10
+
+WORK_COOLDOWN_HOURS = 24
+STREAK_BONUS_PER_WEEK = 0.02   # +2%/tuần
+
+WORDLE_MAX_GUESSES = 5
+WORDLE_DAILY_LIMIT = 6
+WORDLE_WIN_REWARD = 20
+
+WORDLE_WIN_STREAK_REQUIRED = 5
+WORDLE_TOTAL_WINS_REQUIRED = 12
+
 # Meme Achievement
 MEME_CONFIG = {
     "channel_id": 1528562696398831616,  # Kênh meme
@@ -205,3 +220,80 @@ WORDLE_WORDS = [
     "WHITE", "WHOLE", "WOMAN", "WOODS", "WORTH", "WRITE", "WRONG", "YOUNG", "ANGER",
     "STRAY", "SPRAY", "CRONE", "GRASS", "ETHAN", "HOPES", "RATER"
 ]
+
+FLAG_QUESTIONS_PER_GAME = 5
+FLAG_ATTEMPTS_PER_QUESTION = 3
+FLAG_SECONDS_PER_QUESTION = 15
+
+FLAG_STREAK_ROLE_ID = 1531495631259045968
+FLAG_STREAK_REQUIRED = 15          # tổng số CÂU đúng cần đạt
+FLAG_STREAK_WINDOW_GAMES = 3       # trong tối đa 3 ván liên tiếp
+FLAG_STREAK_MIN_MODE_ORDER = 2     # chỉ tính khi mode >= "medium"
+
+FLAG_MODE_ORDER = ["easy", "normal", "medium", "hard", "insane"]
+
+FLAG_COUNTRIES = {
+    "easy": [
+        ("Việt Nam", "vn", ["viet nam", "vietnam"]),
+        ("Mỹ", "us", ["my", "hoa ky", "usa", "united states"]),
+        ("Nhật Bản", "jp", ["nhat ban", "nhat", "japan"]),
+        ("Hàn Quốc", "kr", ["han quoc", "korea", "south korea"]),
+        ("Trung Quốc", "cn", ["trung quoc", "china"]),
+        ("Anh", "gb", ["anh", "uk", "united kingdom", "england"]),
+        ("Pháp", "fr", ["phap", "france"]),
+        ("Đức", "de", ["duc", "germany"]),
+        ("Thái Lan", "th", ["thai lan", "thailand"]),
+        ("Canada", "ca", ["canada"]),
+    ],
+    "normal": [
+        ("Nga", "ru", ["nga", "russia"]),
+        ("Ý", "it", ["y", "italy", "italia"]),
+        ("Tây Ban Nha", "es", ["tay ban nha", "spain"]),
+        ("Brazil", "br", ["brazil", "brasil"]),
+        ("Úc", "au", ["uc", "australia"]),
+        ("Ấn Độ", "in", ["an do", "india"]),
+        ("Mexico", "mx", ["mexico"]),
+        ("Indonesia", "id", ["indonesia"]),
+        ("Singapore", "sg", ["singapore"]),
+        ("Malaysia", "my", ["malaysia"]),
+    ],
+    "medium": [
+        ("Thụy Điển", "se", ["thuy dien", "sweden"]),
+        ("Na Uy", "no", ["na uy", "norway"]),
+        ("Hà Lan", "nl", ["ha lan", "netherlands", "holland"]),
+        ("Bồ Đào Nha", "pt", ["bo dao nha", "portugal"]),
+        ("Ba Lan", "pl", ["ba lan", "poland"]),
+        ("Thổ Nhĩ Kỳ", "tr", ["tho nhi ky", "turkey"]),
+        ("Ai Cập", "eg", ["ai cap", "egypt"]),
+        ("Argentina", "ar", ["argentina"]),
+        ("Philippines", "ph", ["philippines"]),
+        ("New Zealand", "nz", ["new zealand"]),
+    ],
+    "hard": [
+        ("Phần Lan", "fi", ["phan lan", "finland"]),
+        ("Hy Lạp", "gr", ["hy lap", "greece"]),
+        ("Ukraine", "ua", ["ukraine"]),
+        ("Chile", "cl", ["chile"]),
+        ("Colombia", "co", ["colombia"]),
+        ("Kenya", "ke", ["kenya"]),
+        ("Maroc", "ma", ["maroc", "morocco"]),
+        ("Pakistan", "pk", ["pakistan"]),
+        ("Iceland", "is", ["iceland"]),
+        ("Croatia", "hr", ["croatia"]),
+    ],
+    "insane": [
+        ("Bhutan", "bt", ["bhutan"]),
+        ("Eswatini", "sz", ["eswatini", "swaziland"]),
+        ("Kyrgyzstan", "kg", ["kyrgyzstan"]),
+        ("Turkmenistan", "tm", ["turkmenistan"]),
+        ("Vanuatu", "vu", ["vanuatu"]),
+        ("Suriname", "sr", ["suriname"]),
+        ("Djibouti", "dj", ["djibouti"]),
+        ("Lesotho", "ls", ["le tho so", "lesotho"]),
+        ("Palau", "pw", ["palau"]),
+        ("Tuvalu", "tv", ["tuvalu"]),
+    ],
+}
+
+FLAG_MODE_REWARD_PER_QUESTION = {"easy": 5, "normal": 8, "medium": 12, "hard": 18, "insane": 30}
+FLAG_MODE_NAMES = {"easy": "Dễ", "normal": "Bình thường", "medium": "Trung bình", "hard": "Khó", "insane": "Điên cuồng"}

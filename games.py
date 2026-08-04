@@ -13,8 +13,7 @@ import config
 
 # Constants
 MAX_CLEAR_AMOUNT = 2000
-BOT_OWNER_ID = 985004175110848512
-BOT_VERSION = "1.1.5"
+BOT_VERSION = "1.1.6"
 BOT_DESCRIPTION = "Delta Mick Entertainment đa năng các hoạt động lệnh giải trí: kinh tế, mini-game và tiện ích."
 
 # Helper functions
@@ -45,9 +44,6 @@ def _fmt_td(seconds: int) -> str:
         return f"{m}p{s}s"
     return f"{s}s"
 
-def _is_owner(user_id: int) -> bool:
-    return user_id == BOT_OWNER_ID
-
 class GamesCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -72,7 +68,7 @@ class GamesCog(commands.Cog):
         perms = interaction.channel.permissions_for(interaction.guild.me)
         if not perms.manage_messages:
             await interaction.response.send_message(
-                "Bot thiếu quyền **Manage Messages** trong kênh này.", ephemeral=True
+                "Bot thiếu quyền **Quản lý tin nhắn** trong kênh này.", ephemeral=True
             )
             return
 
@@ -100,34 +96,34 @@ class GamesCog(commands.Cog):
     async def clear_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
         if isinstance(error, app_commands.MissingPermissions):
             await interaction.response.send_message(
-                "Bạn cần quyền **Manage Messages** để dùng lệnh này.", ephemeral=True
+                "Bạn cần quyền **Quản lý tin nhắn** để dùng lệnh này.", ephemeral=True
             )
         else:
             await interaction.response.send_message(f"Lỗi: {error}", ephemeral=True)
 
     # ==================== OWNER COMMANDS ====================
-    @app_commands.command(name="setmango", description="Chỉnh mango cho người dùng (chỉ chủ bot)")
+    @app_commands.command(name="chinhxu", description="Chỉnh xu cho người dùng (chỉ chủ bot)")
     @app_commands.describe(
-        amount="Số lượng mango cần chỉnh (số nguyên dương)",
+        amount="Số lượng xu cần chỉnh (số nguyên dương)",
         user="Chọn người dùng",
     )
-    async def setmango(
+    async def chinhxu(
         self,
         interaction: discord.Interaction,
         amount: app_commands.Range[int, 0],
         user: Optional[discord.Member] = None,
     ):
-        if not _is_owner(interaction.user.id):
+        if not store.is_owner(interaction.user.id):
             await interaction.response.send_message(
                 "Bạn không có quyền dùng lệnh này.", ephemeral=True
             )
             return
 
         user = user or interaction.user
-        store.set_mango(user.id, amount)
+        store.set_coins(user.id, amount)
 
         await interaction.response.send_message(
-            f"✅ Đã chỉnh Mango của {user.mention} thành **{amount}** 🥭",
+            f"✅ Đã chỉnh xu của {user.mention} thành **{amount}** xu",
             ephemeral=True
         )
 
@@ -158,7 +154,7 @@ class GamesCog(commands.Cog):
         activity_type: Optional[app_commands.Choice[str]] = None,
         text: Optional[str] = None,
     ):
-        if not _is_owner(interaction.user.id):
+        if not store.is_owner(interaction.user.id):
             await interaction.response.send_message(
                 "Bạn không có quyền dùng lệnh này.", ephemeral=True
             )
@@ -201,7 +197,7 @@ class GamesCog(commands.Cog):
     @app_commands.command(name="reset-meme", description="Đặt lại số lượng meme của user (chỉ chủ bot)")
     @app_commands.describe(user="Người dùng cần đặt lại", confirm="Gõ 'YES' để xác nhận")
     async def reset_meme(self, interaction: discord.Interaction, user: discord.Member, confirm: Optional[str] = None):
-        if not _is_owner(interaction.user.id):
+        if not store.is_owner(interaction.user.id):
             await interaction.response.send_message(
                 "Bạn không có quyền dùng lệnh này.", ephemeral=True
             )
@@ -236,7 +232,7 @@ class GamesCog(commands.Cog):
         level="Số cấp muốn thăng (mặc định: 1)"
     )
     async def promote(self, interaction: discord.Interaction, user: discord.Member, level: int = 1):
-        if not _is_owner(interaction.user.id):
+        if not store.is_owner(interaction.user.id):
             await interaction.response.send_message(
                 "Bạn không có quyền dùng lệnh này.", ephemeral=True
             )
@@ -304,7 +300,7 @@ class GamesCog(commands.Cog):
     @app_commands.command(name="resetcooldown", description="Đặt lại thời gian làm việc cho người chơi (chỉ chủ bot)")
     @app_commands.describe(user="Người chơi cần đặt lại")
     async def resetcooldown(self, interaction: discord.Interaction, user: discord.Member):
-        if not _is_owner(interaction.user.id):
+        if not store.is_owner(interaction.user.id):
             await interaction.response.send_message(
                 "Bạn không có quyền dùng lệnh này.", ephemeral=True
             )
@@ -329,7 +325,7 @@ class GamesCog(commands.Cog):
     @app_commands.command(name="lock", description="Khoá 1 lệnh bất kì (chỉ chủ bot)")
     @app_commands.describe(command_name="Tên lệnh cần khoá")
     async def lock(self, interaction: discord.Interaction, command_name: str):
-        if not _is_owner(interaction.user.id):
+        if not store.is_owner(interaction.user.id):
             await interaction.response.send_message(
                 "Bạn không có quyền dùng lệnh này.", ephemeral=True
             )
@@ -349,7 +345,7 @@ class GamesCog(commands.Cog):
     @app_commands.command(name="unlock", description="Mở khoá 1 lệnh đã khoá bất kì (chỉ chủ bot)")
     @app_commands.describe(command_name="Tên lệnh cần mở khoá")
     async def unlock(self, interaction: discord.Interaction, command_name: str):
-        if not _is_owner(interaction.user.id):
+        if not store.is_owner(interaction.user.id):
             await interaction.response.send_message(
                 "Bạn không có quyền dùng lệnh này.", ephemeral=True
             )
@@ -458,7 +454,7 @@ class GamesCog(commands.Cog):
             rank = "😱 Six seven"
             color = discord.Color.dark_grey()
         elif aura <= 69:
-            rank = "😏 Nice"
+            rank = "😏 Tuyệt vời"
             color = discord.Color.red()
         elif aura <= 85:
             rank = "🔥 Aura rất mạnh."
@@ -531,24 +527,37 @@ class GamesCog(commands.Cog):
         remaining = store.get_wordle_plays_remaining(interaction.user.id)
         if remaining <= 0:
             await interaction.response.send_message(
-                f"Bạn đã dùng hết {store.WORDLE_DAILY_LIMIT} lượt `/wordle` hôm nay, hãy quay lại vào ngày mai.",
+                f"Bạn đã dùng hết {config.WORDLE_DAILY_LIMIT} lượt `/wordle` hôm nay, hãy quay lại vào ngày mai.",
                 ephemeral=True,
             )
             return
 
         if not store.consume_wordle_play(interaction.user.id):
             await interaction.response.send_message(
-                f"Bạn đã dùng hết {store.WORDLE_DAILY_LIMIT} lượt `/wordle` hôm nay, hãy quay lại vào ngày mai.",
+                f"Bạn đã dùng hết {config.WORDLE_DAILY_LIMIT} lượt `/wordle` hôm nay, hãy quay lại vào ngày mai.",
                 ephemeral=True,
             )
             return
 
         store.create_wordle_game(interaction.user.id)
 
-        embed = _build_wordle_embed(interaction.user, [], store.WORDLE_MAX_GUESSES)
+        embed = _build_wordle_embed(interaction.user, [], config.WORDLE_MAX_GUESSES)
         embed.set_footer(text=f"Bạn còn {remaining - 1} lượt tạo ván đoán từ hôm nay.")
         view = WordleView(interaction.user.id)
         await interaction.response.send_message(embed=embed, view=view)
+
+    @app_commands.command(name="flag", description="Đoán 5 lá cờ quốc gia liên tiếp — chọn độ khó để bắt đầu")
+    async def flag(self, interaction: discord.Interaction):
+        if store.get_active_flag_game(interaction.user.id):
+            await interaction.response.send_message(
+                "Bạn đang có ván đoán cờ chưa kết thúc — bấm nút **Đoán** trên tin nhắn cũ, hoặc **Kết thúc** để huỷ ván.",
+                ephemeral=True,
+            )
+            return
+
+        view = discord.ui.View(timeout=300)
+        view.add_item(FlagModeDropdown(interaction.user.id))
+        await interaction.response.send_message("Chọn độ khó để bắt đầu đoán cờ:", view=view, ephemeral=True)
 
     @app_commands.command(name="wordle-stats", description="Xem thống kê trò chơi đoán từ của bạn")
     @app_commands.describe(user="Người chơi cần xem (mặc định: bạn)")
@@ -607,58 +616,21 @@ class GamesCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     # ==================== ECONOMY COMMANDS ====================
-    @app_commands.command(name="mango", description="Xem số mango của bạn hoặc người khác")
+    @app_commands.command(name="coins", description="Xem số xu của bạn hoặc người khác")
     @app_commands.describe(user="Người muốn xem (bỏ trống = xem của bạn)")
-    async def mango(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
+    async def coins(self, interaction: discord.Interaction, user: Optional[discord.Member] = None):
         target = user or interaction.user
-        mango = store.get_mango(target.id)
-        mango_plus = store.get_mango_plus(target.id)
+        coins = store.get_coins(target.id)
         embed = discord.Embed(
-            title=f"🥭 Mango của {target.display_name}",
-            description=f"**{mango}** 🥭 và **{mango_plus}** 🥭+",
+            title=f"Xu của {target.display_name}",
+            description=f"**{coins}** xu",
             color=discord.Color.orange(),
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="quydoi", description="Quy đổi giữa các loại tiền tệ")
-    @app_commands.describe(
-        direction="Chiều quy đổi",
-        amount="Số lượng muốn đổi",
-    )
-    @app_commands.choices(direction=[
-        app_commands.Choice(name="Mango ➜ Mango+", value="to_plus"),
-        app_commands.Choice(name="Mango+ ➜ Mango", value="to_mango"),
-    ])
-    async def quydoi(
-        self,
-        interaction: discord.Interaction,
-        direction: app_commands.Choice[str],
-        amount: app_commands.Range[int, 1],
-    ):
-        user_id = interaction.user.id
-
-        if direction.value == "to_plus":
-            ok, msg, gained = store.convert_mango_to_plus(user_id, amount)
-            if not ok:
-                await interaction.response.send_message(msg, ephemeral=True)
-                return
-            await interaction.response.send_message(
-                f"✅ Đã đổi **{amount} 🥭** thành **{gained} 🥭+** "
-                f"(tỉ lệ 1 mango = {store.MANGO_TO_PLUS_RATE} mango+)."
-            )
-        else:
-            ok, msg, gained = store.convert_plus_to_mango(user_id, amount)
-            if not ok:
-                await interaction.response.send_message(msg, ephemeral=True)
-                return
-            await interaction.response.send_message(
-                f"✅ Đã đổi **{amount} 🥭+** thành **{gained} 🥭** "
-                f"(tỉ lệ 1 mango+ = {store.PLUS_TO_MANGO_RATE} mango)"
-            )
-
     @app_commands.command(name="bill", description="Xem hoá đơn — lịch sử mua sắm gần đây của bạn")
     async def bill(self, interaction: discord.Interaction):
-        max_log = store.MAX_LOG_ENTRIES or 10
+        max_log = config.MAX_LOG_ENTRIES or 10
         log = store.get_purchase_log(interaction.user.id, limit=max_log)
 
         if not log:
@@ -669,19 +641,14 @@ class GamesCog(commands.Cog):
             return
 
         lines = []
-        total_mango = 0
-        total_plus = 0
+        total_coins = 0
         
         for entry in log:
-            currency_label = "🥭" if entry.get("currency") == "mango" else "🥭+"
             at = store.parse_iso(entry["at"])
             unix_ts = int(at.timestamp())
-            lines.append(f"<t:{unix_ts}:R> — **{entry['label']}** — {entry['cost']} {currency_label}")
-            
-            if entry.get("currency") == "mango":
-                total_mango += entry["cost"]
-            else:
-                total_plus += entry["cost"]
+            lines.append(f"<t:{unix_ts}:R> — **{entry['label']}** (giá {entry['cost']} xu)")
+
+            total_coins += entry["cost"]
 
         embed = discord.Embed(
             title="🧾 Hoá đơn mua sắm",
@@ -690,10 +657,8 @@ class GamesCog(commands.Cog):
         )
         
         summary_parts = []
-        if total_mango:
-            summary_parts.append(f"{total_mango} 🥭")
-        if total_plus:
-            summary_parts.append(f"{total_plus} 🥭+")
+        if total_coins:
+            summary_parts.append(f"{total_coins} xu")
         
         embed.set_footer(
             text=f"Tổng {len(log)} giao dịch gần nhất — đã chi: {' + '.join(summary_parts) if summary_parts else '0'}"
@@ -753,45 +718,36 @@ class GamesCog(commands.Cog):
         # Check cooldown
         cooldown = store.get_work_cooldown_remaining_sec(target.id)
         embed.add_field(
-            name="⏱️ Cooldown",
+            name="⏱️ Thời gian làm việc",
             value=f"Còn `{_fmt_td(cooldown)}`" if cooldown > 0 else "`Sẵn sàng`",
             inline=True
         )
         await interaction.followup.send(embed=embed)
 
-    @app_commands.command(name="lixi", description="Lì xì mango cho mọi người trong kênh")
+    @app_commands.command(name="lixi", description="Lì xì xu cho mọi người trong kênh")
     @app_commands.describe(
         amount="Tổng số lượng muốn lì xì",
-        currency="Loại tiền tệ để lì xì",
     )
-    @app_commands.choices(currency=[
-        app_commands.Choice(name="Mango 🥭", value="mango"),
-        app_commands.Choice(name="Mango+ 🥭+", value="mango_plus"),
-    ])
     async def lixi(
         self,
         interaction: discord.Interaction,
         amount: app_commands.Range[int, 1],
-        currency: Optional[app_commands.Choice[str]] = None,
     ):
-        currency_value = currency.value if currency else "mango"
-        currency_label = "🥭" if currency_value == "mango" else "🥭+"
-
         ok, msg, envelope_id = store.create_lixi(
             interaction.guild.id, interaction.channel.id, 
-            interaction.user.id, amount, currency_value
+            interaction.user.id, amount
         )
         if not ok:
             await interaction.response.send_message(msg, ephemeral=True)
             return
 
-        expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=store.LIXI_DURATION_MIN)
+        expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=config.LIXI_DURATION_MIN)
         expires_unix = int(expires_at.timestamp())
 
         embed = discord.Embed(
             title="🧧 Lì xì!",
             description=(
-                f"{interaction.user.mention} vừa lì xì **{amount} {currency_label}**!\n"
+                f"{interaction.user.mention} vừa lì xì **{amount} xu**!\n"
                 f"Bấm nút bên dưới để nhận — mỗi người chỉ nhận được 1 lần.\n"
                 f"Lì xì tự đóng lúc <t:{expires_unix}:t> (<t:{expires_unix}:R>)."
             ),
@@ -803,7 +759,7 @@ class GamesCog(commands.Cog):
         await interaction.response.send_message(embed=embed, view=view)
 
         async def _auto_expire():
-            await asyncio.sleep(store.LIXI_DURATION_MIN * 60 + 2)
+            await asyncio.sleep(config.LIXI_DURATION_MIN * 60 + 2)
             store.refund_expired_lixi(envelope_id)
             view.stop()
             try:
@@ -813,35 +769,27 @@ class GamesCog(commands.Cog):
 
         asyncio.create_task(_auto_expire())
 
-    @app_commands.command(name="rank", description="Xem top 10 người dùng có nhiều mango nhất")
-    @app_commands.describe(type="Chọn loại mango muốn xem bảng xếp hạng")
-    @app_commands.choices(type=[
-        app_commands.Choice(name="Mango", value="mango"),
-        app_commands.Choice(name="Mango+", value="mango_plus")
-    ])
-    async def rank(self, interaction: discord.Interaction, type: str = "mango"):
+    @app_commands.command(name="rank", description="Xem top 10 người dùng có nhiều xu nhất")
+    async def rank(self, interaction: discord.Interaction):
         await interaction.response.defer()
 
-        users_ref_data = store.get_all_mango_data()
+        users_ref_data = store.get_all_users_data()
 
         entries = []
         for uid_str, udata in users_ref_data.items():
             if not isinstance(udata, dict):
                 continue
-            
-            if type == "mango_plus":
-                mango = udata.get("mango_plus")
-            else:
-                mango = udata.get("mango")
-                
-            if isinstance(mango, (int, float)) and mango > 0:
-                entries.append((int(uid_str), int(mango)))
+
+            coins = udata.get("coins")
+
+            if isinstance(coins, (int, float)) and coins > 0:
+                entries.append((int(uid_str), int(coins)))
 
         entries.sort(key=lambda x: x[1], reverse=True)
         top = entries[:10]
 
         if not top:
-            await interaction.followup.send("Chưa có ai sở hữu mango.")
+            await interaction.followup.send("Chưa có ai sở hữu xu.")
             return
 
         # Cache user objects
@@ -855,7 +803,6 @@ class GamesCog(commands.Cog):
                     user = None
             user_cache[uid] = user
 
-        currency_txt = "🥭+" if type == "mango_plus" else "🥭"
         medal = ["🥇", "🥈", "🥉"]
         
         lines = []
@@ -864,7 +811,7 @@ class GamesCog(commands.Cog):
             name = user.display_name if user else f"Người dùng {uid}"
             amount_str = f"{amount:,}".replace(",", ".")
             rank_icon = medal[i] if i < 3 else f"`#{i + 1}`"
-            lines.append(f"{rank_icon} **{name}** — {amount_str} {currency_txt}")
+            lines.append(f"{rank_icon} **{name}** — {amount_str} xu")
 
         # Find user's rank
         user_rank = None
@@ -875,19 +822,17 @@ class GamesCog(commands.Cog):
                 user_amount = amount
                 break
 
-        title = "🏆 Bảng xếp hạng Mango+" if type == "mango_plus" else "🏆 Bảng xếp hạng Mango"
-
         embed = discord.Embed(
-            title=title,
+            title="🏆 Bảng xếp hạng xu",
             description="\n".join(lines) if lines else "Không có dữ liệu",
             color=discord.Color.gold()
         )
 
         if user_rank is not None and user_amount is not None:
             amount_str = f"{user_amount:,}".replace(",", ".")
-            embed.set_footer(text=f"📍 Hạng của bạn: #{user_rank} • {amount_str} {currency_txt}")
+            embed.set_footer(text=f"📍 Hạng của bạn: #{user_rank} • {amount_str} xu")
         else:
-            embed.set_footer(text="Mango được tính chung toàn bộ máy chủ.")
+            embed.set_footer(text="Xu được tính chung toàn bộ máy chủ.")
 
         await interaction.followup.send(embed=embed)
 
@@ -1056,7 +1001,7 @@ class GamesCog(commands.Cog):
         perms = channel.permissions_for(guild.me)
         if not perms.create_instant_invite:
             await interaction.response.send_message(
-                "Bot thiếu quyền **Create Invite** trong kênh này.", ephemeral=True
+                "Bot thiếu quyền **Tạo lời mời** trong kênh này.", ephemeral=True
             )
             return
 
@@ -1122,7 +1067,7 @@ class GamesCog(commands.Cog):
                     store.claim_meme_role(user.id)
 
                     embed = discord.Embed(
-                        title="🎉 **Thành tích Meme Master!**",
+                        title="🎉 **Thành tích Bậc Thầy Meme!**",
                         description=f"{user.mention} đã gửi **{new_count} meme** trong kênh <#{config.MEME_CONFIG['channel_id']}>!",
                         color=discord.Color.gold(),
                     )
@@ -1134,7 +1079,7 @@ class GamesCog(commands.Cog):
                     embed.set_footer(text="Tiếp tục gửi meme để giữ vững danh hiệu!")
                     
                     await message.channel.send(
-                        content=f"🎊 Chúc mừng {user.mention}! <@&{role_id}>",
+                        content=f"🎊 Chúc mừng {user.mention}!",
                         embed=embed
                     )
                 except discord.Forbidden:
@@ -1161,7 +1106,7 @@ class CompanyDropdown(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message(
-                "Không phải phiên của bạn.", ephemeral=True
+                "Không phải công việc của bạn.", ephemeral=True
             )
             return
 
@@ -1216,11 +1161,11 @@ class CompanyDropdown(discord.ui.Select):
                 title=f"✅ Hoàn thành công việc tại {result['company_name']}",
                 color=discord.Color.green(),
             )
-            embed.add_field(name="Lương nhận được", value=f"{result['pay']} 🥭", inline=True)
+            embed.add_field(name="Lương nhận được", value=f"{result['pay']} xu", inline=True)
             embed.add_field(name="Chức vụ", value=position_name, inline=True)
             embed.add_field(
                 name="Streak",
-                value=f"{result['streak_weeks']} tuần (+{result['streak_weeks'] * store.STREAK_BONUS_PER_WEEK * 100:.0f}% lương)",
+                value=f"{result['streak_weeks']} tuần (+{result['streak_weeks'] * config.STREAK_BONUS_PER_WEEK * 100:.0f}% lương)",
                 inline=True,
             )
             await interaction.edit_original_response(content=None, embed=embed)
@@ -1234,7 +1179,7 @@ class CompanyDropdown(discord.ui.Select):
 
 class LixiClaimView(discord.ui.View):
     def __init__(self, guild_id: int, envelope_id: str, creator_id: int):
-        super().__init__(timeout=store.LIXI_DURATION_MIN * 60 + 5)
+        super().__init__(timeout=config.LIXI_DURATION_MIN * 60 + 5)
         self.guild_id = guild_id
         self.envelope_id = envelope_id
         self.creator_id = creator_id
@@ -1255,20 +1200,19 @@ class LixiClaimView(discord.ui.View):
             return
 
         envelope = store.get_lixi(self.envelope_id)
-        currency_label = "🥭" if (envelope and envelope.get("currency") == "mango") else "🥭+"
         await interaction.response.send_message(
-            f"🎉 Bạn đã nhận được **{amount} {currency_label}** từ lì xì!",
+            f"🎉 Bạn đã nhận được **{amount} xu** từ lì xì!",
             ephemeral=True
         )
 
-        updated_embed = _build_lixi_embed(self.envelope_id, currency_label=currency_label)
+        updated_embed = _build_lixi_embed(self.envelope_id)
         if updated_embed:
             try:
                 await interaction.message.edit(embed=updated_embed)
             except discord.HTTPException:
                 pass
 
-def _build_lixi_embed(envelope_id: str, currency_label: str = "🥭") -> Optional[discord.Embed]:
+def _build_lixi_embed(envelope_id: str) -> Optional[discord.Embed]:
     envelope = store.get_lixi(envelope_id)
     if envelope is None:
         return None
@@ -1278,7 +1222,7 @@ def _build_lixi_embed(envelope_id: str, currency_label: str = "🥭") -> Optiona
     expires_unix = int(store.parse_iso(envelope["expires_at"]).timestamp())
 
     lines_status = (
-        f"{creator_mention} vừa lì xì **{amount} {currency_label}**!\n"
+        f"{creator_mention} vừa lì xì **{amount} xu**!\n"
         f"Bấm nút bên dưới để nhận — mỗi người chỉ nhận được 1 lần.\n"
         f"Lì xì tự động đóng lúc <t:{expires_unix}:t> (<t:{expires_unix}:R>)."
     )
@@ -1294,7 +1238,7 @@ def _build_lixi_embed(envelope_id: str, currency_label: str = "🥭") -> Optiona
     
     if claimed_order:
         lines = [
-            f"<@{uid}> — **{claimed_by.get(uid, 0)} {currency_label}**"
+            f"<@{uid}> — **{claimed_by.get(uid, 0)} xu**"
             for uid in claimed_order
         ]
         embed.add_field(name="🎁 Người đã nhận", value="\n".join(lines), inline=False)
@@ -1327,7 +1271,7 @@ class HelpView(discord.ui.View):
         await interaction.response.edit_message(embed=self.pages[self.index], view=self)
 
 def _build_help_pages(bot: commands.Bot, requester_id: int) -> List[discord.Embed]:
-    is_owner = _is_owner(requester_id)
+    is_owner = store.is_owner(requester_id)
     all_commands = bot.tree.get_commands()
     locked_commands = store.get_locked_commands() if not is_owner else {}
 
@@ -1384,7 +1328,7 @@ class WordleView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
-                "Đây không phải ván đoán từ của bạn.", ephemeral=True
+                "Đây không phải ván của bạn.", ephemeral=True
             )
             return False
         return True
@@ -1484,9 +1428,9 @@ class WordleGuessModal(discord.ui.Modal, title="Đoán từ Wordle"):
         if result["status"] == "win":
             # Handle win
             stats_result = store.update_wordle_stats(self.owner_id, True)
-            store.transaction_mango(self.owner_id, store.WORDLE_WIN_REWARD_MANGO)
+            store.transaction_coins(self.owner_id, config.WORDLE_WIN_REWARD)
 
-            finished_text = f"🎉 **Chính xác!** Bạn nhận **{store.WORDLE_WIN_REWARD_MANGO} 🥭**!"
+            finished_text = f"🎉 **Chính xác!** Bạn nhận **{config.WORDLE_WIN_REWARD} xu**!"
 
             # Check for achievement
             if stats_result.get("achievement"):
@@ -1520,15 +1464,7 @@ class WordleGuessModal(discord.ui.Modal, title="Đoán từ Wordle"):
 
         elif result["status"] == "lose":
             # Handle loss
-            store.transaction_mango(
-                self.owner_id,
-                store.WORDLE_PARTICIPATE_REWARD_PLUS,
-                use_plus=True
-            )
-            finished_text = (
-                f"💀 Hết lượt! Từ bí mật là **`{result['word']}`**.\n"
-                f"Bạn nhận **{store.WORDLE_PARTICIPATE_REWARD_PLUS} 🥭+**."
-            )
+            finished_text = f"💀 Hết lượt! Từ bí mật là **`{result['word']}`**."
             store.delete_wordle_game(self.owner_id)
 
             guesses_list = game.get("guesses", []) if isinstance(game, dict) else []
@@ -1553,6 +1489,182 @@ class WordleGuessModal(discord.ui.Modal, title="Đoán từ Wordle"):
                 result["guesses_left"]
             )
             await interaction.response.edit_message(embed=embed)
+
+# Flag
+def _build_flag_embed(user, game: dict, extra_text: str | None = None) -> discord.Embed:
+    idx = game["current_index"]
+    question = game["questions"][idx]
+    mode = game["mode"]
+    attempts_used = game["current_attempts"]
+    attempts_left = config.FLAG_ATTEMPTS_PER_QUESTION - attempts_used
+
+    embed = discord.Embed(
+        title=f"🚩 Đoán cờ — {user.display_name}",
+        description=(
+            f"**Câu {idx + 1}/{config.FLAG_QUESTIONS_PER_GAME}** — Độ khó: **{config.FLAG_MODE_NAMES[mode]}**\n"
+            f"Đây là cờ của quốc gia nào?\n\n"
+            f"Lượt thử còn lại: **{attempts_left}/{config.FLAG_ATTEMPTS_PER_QUESTION}**\n"
+            f"Đúng đến hiện tại: **{game['correct_count']}/{config.FLAG_QUESTIONS_PER_GAME}**"
+        ),
+        color=discord.Color.blue(),
+    )
+    embed.set_image(url=f"https://flagcdn.com/w320/{question['iso_code']}.png")
+    if extra_text:
+        embed.add_field(name="Kết quả", value=extra_text, inline=False)
+    embed.set_footer(text=f"Mỗi câu đúng: {config.FLAG_MODE_REWARD_PER_QUESTION[mode]} xu · {config.FLAG_SECONDS_PER_QUESTION}s/câu")
+    return embed
+
+def _build_flag_finished_embed(user, mode: str, correct_count: int, streak_achieved: bool) -> discord.Embed:
+    total_reward = correct_count * config.FLAG_MODE_REWARD_PER_QUESTION[mode]
+    embed = discord.Embed(
+        title=f"🏁 Kết thúc ván đoán cờ — {user.display_name}",
+        description=(
+            f"Độ khó: **{config.FLAG_MODE_NAMES[mode]}**\n"
+            f"Kết quả: **{correct_count}/{config.FLAG_QUESTIONS_PER_GAME}** câu đúng\n"
+            f"Tổng nhận: **{total_reward} xu**"
+        ),
+        color=discord.Color.green() if correct_count >= 3 else discord.Color.dark_grey(),
+    )
+    if streak_achieved:
+        embed.add_field(
+            name="🏆 Thành tích mới!",
+            value=f"Đạt {config.FLAG_STREAK_REQUIRED} câu đúng trong {config.FLAG_STREAK_WINDOW_GAMES} ván liên tiếp (chế độ trung bình trở lên)!\nNhận role <@&{config.FLAG_STREAK_ROLE_ID}>",
+            inline=False,
+        )
+    return embed
+
+class FlagModeDropdown(discord.ui.Select):
+    def __init__(self, owner_id: int):
+        self.owner_id = owner_id
+        options = [
+            discord.SelectOption(label=config.FLAG_MODE_NAMES[m], value=m,
+                                  description=f"{config.FLAG_MODE_REWARD_PER_QUESTION[m]} xu/câu đúng")
+            for m in config.FLAG_MODE_ORDER
+        ]
+        super().__init__(placeholder="Chọn độ khó...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Không phải phiên của bạn.", ephemeral=True)
+            return
+
+        mode = self.values[0]
+        game = store.create_flag_game(self.owner_id, mode)
+        embed = _build_flag_embed(interaction.user, game)
+        view = FlagView(self.owner_id)
+        await interaction.response.edit_message(content=None, embed=embed, view=view)
+
+class FlagView(discord.ui.View):
+    def __init__(self, owner_id: int):
+        super().__init__(timeout=None)
+        self.owner_id = owner_id
+        self.guess_button.custom_id = f"flag:guess:{owner_id}"
+        self.end_button.custom_id = f"flag:end:{owner_id}"
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message("Đây không phải ván của bạn.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="🚩 Đoán", style=discord.ButtonStyle.primary, custom_id="flag:guess:template")
+    async def guess_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        expired = store.check_and_expire_flag_question(self.owner_id)
+        if expired:
+            await self._render_after_expire_or_answer(interaction, expired)
+            return
+
+        game = store.get_active_flag_game(self.owner_id)
+        if game is None:
+            await interaction.response.send_message("Ván này đã kết thúc rồi.", ephemeral=True)
+            return
+        await interaction.response.send_modal(FlagGuessModal(self.owner_id))
+
+    @discord.ui.button(label="🛑 Kết thúc", style=discord.ButtonStyle.danger, custom_id="flag:end:template")
+    async def end_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        store.delete_flag_game(self.owner_id)
+        for item in self.children:
+            item.disabled = True
+        embed = discord.Embed(
+            title="🛑 Đã kết thúc ván đoán cờ",
+            description="Tin nhắn này sẽ tự xoá sau 15 giây.",
+            color=discord.Color.dark_grey(),
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        async def _auto_delete():
+            await asyncio.sleep(15)
+            try:
+                await interaction.delete_original_response()
+            except discord.HTTPException:
+                pass
+        asyncio.create_task(_auto_delete())
+
+    async def _render_after_expire_or_answer(self, interaction: discord.Interaction, result: dict):
+        user = interaction.user
+        if result["is_last_question"]:
+            embed = _build_flag_finished_embed(user, result["mode"], result["correct_count"], False)
+            for item in self.children:
+                item.disabled = True
+            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            game = store.get_active_flag_game(self.owner_id)
+            embed = _build_flag_embed(user, game, extra_text=f"⏱️ Hết giờ! Đáp án là **{result['country']}**.")
+            await interaction.response.edit_message(embed=embed, view=self)
+
+class FlagGuessModal(discord.ui.Modal, title="Đoán tên quốc gia"):
+    guess_input = discord.ui.TextInput(
+        label="Tên quốc gia",
+        placeholder="Ví dụ: Việt Nam",
+        max_length=50,
+    )
+
+    def __init__(self, owner_id: int):
+        super().__init__()
+        self.owner_id = owner_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guess = self.guess_input.value.strip()
+        result = store.submit_flag_guess(self.owner_id, guess)
+
+        if result["status"] == "no_game":
+            await interaction.response.send_message("Ván này đã kết thúc rồi.", ephemeral=True)
+            return
+
+        user = interaction.user
+
+        if result["status"] == "correct":
+            store.transaction_coins(self.owner_id, result["reward"])
+
+        if result["status"] in ("correct", "wrong_final") and result["is_last_question"]:
+            game_check = store.get_active_flag_game(self.owner_id)
+            if game_check is None:  # ván đã hết
+                embed = _build_flag_finished_embed(user, result["mode"], result["correct_count"], result["streak_achieved"])
+                view = FlagView(self.owner_id)
+                for item in view.children:
+                    item.disabled = True
+
+                if result["streak_achieved"] and interaction.guild:
+                    role = interaction.guild.get_role(config.FLAG_STREAK_ROLE_ID)
+                    if role and role not in user.roles:
+                        try:
+                            await user.add_roles(role)
+                        except discord.Forbidden:
+                            pass
+
+                await interaction.response.edit_message(embed=embed, view=view)
+                return
+
+        game = store.get_active_flag_game(self.owner_id)
+        if result["status"] == "correct":
+            extra = f"✅ Chính xác! **{result['country']}** — nhận **{result['reward']} xu**."
+        elif result["status"] == "wrong_retry":
+            extra = f"❌ Sai rồi, còn **{result['attempts_left']}** lượt thử."
+        else:  # wrong_final
+            extra = f"❌ Hết lượt! Đáp án là **{result['country']}**."
+
+        embed = _build_flag_embed(user, game, extra_text=extra)
+        await interaction.response.edit_message(embed=embed)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(GamesCog(bot))
