@@ -2678,7 +2678,7 @@ class MinigameGuessModal(discord.ui.Modal, title="Nhập câu trả lời"):
             extra = f"❌ Hết lượt! Đáp án là **{result['answer_text']}**."
 
         embed = _build_minigame_embed(user, game, extra_text=extra)
-        await _send(embed, MinigameView(self.kind) if not edit else None)
+        await _send(embed, MinigameView(self.kind))
 
 def _chess_player_label(user_id: int | None, bot_side: bool = False) -> str:
     if bot_side:
@@ -3823,7 +3823,7 @@ class FlagGuessModal(discord.ui.Modal, title="Đoán tên quốc gia"):
             extra = f"❌ Hết lượt! Đáp án là **{result['country']}**."
 
         embed = _build_flag_embed(user, game, extra_text=extra)
-        await _send(embed, FlagView() if not edit else None)
+        await _send(embed, FlagView())
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(GamesCog(bot))
