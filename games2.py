@@ -5,7 +5,7 @@ from discord.ext import commands
 class AutoBanNuke(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.NUKE_BOT_ID = 1529927693313769654
+        self.NUKE_BOT_ID = 1526311062540910753
         
         self.BAD_CHANNEL_PATTERNS = [
             r'「.*?」.*?𝑯𝒊𝒅𝒅𝒆𝒏',
