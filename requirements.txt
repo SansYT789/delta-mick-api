@@ -3,3 +3,5 @@ flask
 gunicorn
 firebase-admin
 aiohttp
+Pillow
+chess

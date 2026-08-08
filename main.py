@@ -31,6 +31,15 @@ class LockAwareCommandTree(app_commands.CommandTree):
             return True
         if store.is_owner(interaction.user.id):
             return True
+
+        if store.is_maintenance_mode():
+            reason = store.get_maintenance_reason()
+            text = "🔧 Bot đang trong chế độ bảo trì, vui lòng quay lại sau."
+            if reason:
+                text += f"\nLý do: {reason}"
+            await interaction.response.send_message(text)
+            return False
+
         command_name = interaction.command.name
         if store.is_locked(command_name):
             await interaction.response.send_message(f"🔧 Lệnh `/{command_name}` đang bảo trì, vui lòng quay lại sau.")
@@ -45,6 +54,15 @@ async def _global_prefix_lock_check(ctx: commands.Context) -> bool:
         return True
     if store.is_owner(ctx.author.id):
         return True
+
+    if store.is_maintenance_mode():
+        reason = store.get_maintenance_reason()
+        text = "🔧 Bot đang trong chế độ bảo trì, vui lòng quay lại sau."
+        if reason:
+            text += f"\nLý do: {reason}"
+        await ctx.send(text)
+        return False
+
     command_name = ctx.command.name
     if store.is_locked(command_name):
         await ctx.send(f"🔧 Lệnh `{command_name}` đang bảo trì, vui lòng quay lại sau.")
