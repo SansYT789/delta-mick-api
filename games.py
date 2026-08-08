@@ -3670,7 +3670,6 @@ class FlagModeDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         user_id = interaction.user.id
-        is_owner = bool(interaction.message and interaction.message.interaction_metadata and interaction.message.interaction_metadata.user.id == user_id)
 
         if store.get_active_flag_game(user_id):
             await interaction.response.send_message("Bạn đang có ván đoán cờ chưa kết thúc.", ephemeral=True)
@@ -3687,10 +3686,7 @@ class FlagModeDropdown(discord.ui.Select):
         game = store.create_flag_game(user_id, mode)
         embed = _build_flag_embed(interaction.user, game)
         view = FlagView()
-        if is_owner:
-            await interaction.response.edit_message(content=None, embed=embed, view=view)
-        else:
-            await interaction.response.send_message(embed=embed, view=view)
+        await interaction.response.send_message(embed=embed, view=view)
 
 class FlagView(discord.ui.View):
     def __init__(self, finished: bool = False):
