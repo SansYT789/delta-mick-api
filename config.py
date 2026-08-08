@@ -538,7 +538,7 @@ CODE_DEFAULT_DURATION_HOURS = 24
 
 # Daily
 DAILY_MIN_REWARD = 1
-DAILY_MAX_REWARD = 100
+DAILY_MAX_REWARD = 60
 DAILY_STREAK_BONUS_PER_WEEK = 0.05  # +5%/tuần streak
 DAILY_TZ_OFFSET_HOURS = 7  # UTC+7 VN
 
@@ -673,6 +673,38 @@ CAR_POOL = [
     ("Renault", ["renault"]),
     ("Volvo Cars", ["volvo"]),
     ("Mitsubishi Motors", ["mitsubishi"]),
+    ("McLaren Automotive", ["mclaren"]),
+    ("Aston Martin", ["aston martin", "aston"]),
+    ("Alfa Romeo", ["alfa romeo", "alfa"]),
+    ("Dodge", ["dodge"]),
+    ("Ram Trucks", ["ram"]),
+    ("GMC", ["gmc"]),
+    ("Buick", ["buick"]),
+    ("Cadillac", ["cadillac", "caddy"]),
+    ("Chrysler", ["chrysler"]),
+    ("Jeep", ["jeep"]),
+    ("Land Rover", ["land rover", "landrover"]),
+    ("Mini", ["mini"]),
+    ("Fiat", ["fiat"]),
+    ("Citroën", ["citroen", "citroën"]),
+    ("Skoda Auto", ["skoda"]),
+    ("Seat", ["seat"]),
+    ("Suzuki", ["suzuki"]),
+    ("Isuzu", ["isuzu"]),
+    ("Daihatsu", ["daihatsu"]),
+    ("Mahindra", ["mahindra"]),
+    ("Tata Motors", ["tata"]),
+    ("Lexus", ["lexus"]),
+    ("Acura", ["acura"]),
+    ("Infiniti", ["infiniti"]),
+    ("Genesis Motor", ["genesis"]),
+    ("Polestar", ["polestar"]),
+    ("Rivian", ["rivian"]),
+    ("Lucid Motors", ["lucid"]),
+    ("Fisker", ["fisker"]),
+    ("BYD", ["byd"]),
+    ("Geely", ["geely"]),
+    ("Great Wall Motors", ["great wall", "gwm"]),
 ]
 
 # (tên bài Wikipedia, [đáp án hợp lệ tên quốc gia])
@@ -735,6 +767,56 @@ HOAHOC_QUESTIONS = [
     {"q": "Ký hiệu hoá học của nguyên tố Photpho là gì?", "answers": ["p"]},
     {"q": "pH của dung dịch trung tính là bao nhiêu?", "answers": ["7"]},
     {"q": "Chất nào có công thức C2H5OH (rượu uống)?", "answers": ["etanol", "ethanol", "ruou etylic", "con"]},
+    {"q": "Công thức hóa học của Axit Nitric là gì?", "answers": ["hno3"]},
+    {"q": "Công thức hóa học của Axit Photphoric là gì?", "answers": ["h3po4"]},
+    {"q": "Công thức hóa học của Axit Axetic (giấm) là gì?", "answers": ["ch3cooh", "c2h4o2"]},
+    {"q": "Công thức hóa học của Bari Hidroxit là gì?", "answers": ["ba(oh)2"]},
+    {"q": "Công thức hóa học của Canxi Hidroxit (vôi tôi) là gì?", "answers": ["ca(oh)2"]},
+    {"q": "Công thức hóa học của Kali Pemanganat (thuốc tím) là gì?", "answers": ["kmno4"]},
+    {"q": "Công thức hóa học của Natri Cacbonat (soda) là gì?", "answers": ["na2co3"]},
+    {"q": "Công thức hóa học của Natri Bicacbonat (muối nở) là gì?", "answers": ["nahco3"]},
+    {"q": "Công thức hóa học của Kali Clorua là gì?", "answers": ["kcl"]},
+    {"q": "Công thức hóa học của Bạc Nitrat là gì?", "answers": ["agno3"]},
+    {"q": "Công thức hóa học của Đồng (II) Sunfat là gì?", "answers": ["cuso4"]},
+    {"q": "Công thức hóa học của Sắt (III) Clorua là gì?", "answers": ["fecl3"]},
+    {"q": "Công thức hóa học của Nhôm Sunfat là gì?", "answers": ["al2(so4)3"]},
+    {"q": "Công thức hóa học của Axit Citric (có trong chanh) là gì?", "answers": ["c6h8o7"]},
+    {"q": "Công thức hóa học của Benzen là gì?", "answers": ["c6h6"]},
+    {"q": "Công thức hóa học của Axit Acetylsalicylic (Aspirin) là gì?", "answers": ["c9h8o4"]},
+    {"q": "Công thức hóa học của Caffeine là gì?", "answers": ["c8h10n4o2"]},
+    {"q": "Công thức hóa học của Sucrose (đường mía) là gì?", "answers": ["c12h22o11"]},
+    {"q": "Công thức hóa học của Ure (phân đạm) là gì?", "answers": ["co(nh2)2", "ch4n2o"]},
+    {"q": "Công thức hóa học của Clo là gì?", "answers": ["cl2"]},
+    {"q": "Công thức hóa học của Ozôn là gì?", "answers": ["o3"]},
+    {"q": "Công thức hóa học của Silic điôxit (cát) là gì?", "answers": ["sio2"]},
+    {"q": "Công thức hóa học của Kali Đicromat là gì?", "answers": ["k2cr2o7"]},
+    {"q": "Định luật bảo toàn khối lượng được phát biểu bởi ai?", "answers": ["lomonosov", "lavoisier"]},
+    {"q": "Nguyên tử khối của Oxi là bao nhiêu?", "answers": ["16"]},
+    {"q": "Nguyên tử khối của Cacbon là bao nhiêu?", "answers": ["12"]},
+    {"q": "Hóa trị của Oxi trong các hợp chất thường là bao nhiêu?", "answers": ["ii", "2"]},
+    {"q": "Hóa trị của Hidro trong các hợp chất thường là bao nhiêu?", "answers": ["i", "1"]},
+    {"q": "Khí nào được biết đến là 'khí cười'?", "answers": ["n2o", "dinito monoxit"]},
+    {"q": "Thành phần chính của khí thiên nhiên là gì?", "answers": ["metan", "ch4"]},
+    {"q": "Thành phần chính của thạch cao là gì?", "answers": ["caso4", "canxi sunfat"]},
+    {"q": "Thành phần chính của xi măng là gì?", "answers": ["canxi silicat", "canxi aluminat"]},
+    {"q": "Muối ăn được tạo thành từ các nguyên tố nào?", "answers": ["natri", "na", "clo", "cl"]},
+    {"q": "Quặng chính để sản xuất nhôm là gì?", "answers": ["boxit", "al2o3"]},
+    {"q": "Khí nào được dùng để hàn cắt kim loại (với axetilen)?", "answers": ["oxi", "o2"]},
+    {"q": "Phản ứng giữa Hidro và Oxi tạo ra chất gì?", "answers": ["nuoc", "h2o", "nước"]},
+    {"q": "Phản ứng giữa Sắt và Oxi tạo ra chất gì?", "answers": ["oxit sat tu", "fe3o4", "sắt từ oxit"]},
+    {"q": "Phản ứng giữa Natri và Clo tạo ra chất gì?", "answers": ["nacl", "muoi an", "natri clorua"]},
+    {"q": "Phản ứng giữa Canxi Oxi (vôi sống) và Nước tạo ra chất gì?", "answers": ["ca(oh)2", "canxi hidroxit", "voi toi"]},
+    {"q": "Phản ứng giữa Kẽm và Axit Clohidric tạo ra muối gì và khí gì?", "answers": ["zncl2 va h2", "kem clorua va hidro"]},
+    {"q": "Phản ứng giữa Sắt và Axit Sunfuric loãng tạo ra muối gì và khí gì?", "answers": ["feso4 va h2", "sat (ii) sunfat va hidro"]},
+    {"q": "Phản ứng giữa Đồng (II) Oxit và Axit Clohidric tạo ra muối gì?", "answers": ["cucl2", "dong (ii) clorua"]},
+    {"q": "Phản ứng giữa Natri Hidroxit và Axit Clohidric tạo ra muối gì?", "answers": ["nacl", "natri clorua"]},
+    {"q": "Phản ứng giữa Natri Hidroxit và Axit Sunfuric tạo ra muối gì?", "answers": ["na2so4", "natri sunfat"]},
+    {"q": "Phản ứng giữa Canxi Cacbonat và Axit Clohidric tạo ra khí gì?", "answers": ["co2", "cacbonic"]},
+    {"q": "Phản ứng đốt cháy Metan trong Oxi tạo ra những chất gì?", "answers": ["co2 va h2o", "cacbonic va nuoc"]},
+    {"q": "Phản ứng giữa Nhôm và Oxi tạo ra chất gì?", "answers": ["al2o3", "nhom oxit"]},
+    {"q": "Phản ứng giữa Magie và Oxi tạo ra chất gì?", "answers": ["mgo", "magie oxit"]},
+    {"q": "Phản ứng giữa Kali và Nước tạo ra chất gì?", "answers": ["koh va h2", "kali hidroxit va hidro"]},
+    {"q": "Phản ứng giữa Sắt (III) Oxit và Nhôm (phản ứng nhiệt nhôm) tạo ra chất gì?", "answers": ["fe va al2o3", "sat va nhom oxit"]},
 ]
 
 # Nối từ (word chain)
@@ -745,7 +827,7 @@ NOITU_WORD_COOLDOWN_GAMES = 49  # 1 từ đã dùng bị khoá trong N ván ti�
 
 # Level system
 LEVEL_XP_NEEDED_BASE = 100
-LEVEL_XP_NEEDED_PER_LEVEL = 50  # XP cần(level) = BASE + level * PER_LEVEL
+LEVEL_XP_NEEDED_PER_LEVEL = 170  # XP cần(level) = BASE + level * PER_LEVEL
 
 LEVEL_XP_GROWTH_PER_LEVEL = 0.03  # +3% XP nhận mỗi hành động / level hiện tại
 
@@ -759,10 +841,10 @@ LEVEL_MINIGAME_WIN_XP_BASE = 100
 LEVEL_MAX = 1000
 
 # AI Chat
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 AI_CHAT_HISTORY_LENGTH = 8  # số lượt (user+bot) gần nhất giữ làm ngữ cảnh
-AI_CHAT_COOLDOWN_SEC = 7
+AI_CHAT_COOLDOWN_SEC = 10
 AI_CHAT_SYSTEM_PROMPT = (
     "Bạn là trợ lý AI vui vẻ, thân thiện tên là Delta Mick, tích hợp trong 1 Discord bot giải trí. "
     "Trả lời ngắn gọn, tự nhiên, có thể dùng emoji nhẹ nhàng. Trả lời bằng tiếng Việt trừ khi được hỏi bằng ngôn ngữ khác."
